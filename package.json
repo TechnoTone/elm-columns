@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
-  "scripts": {},
+  "scripts": {
+    "start": "parcel index.html"
+  },
   "author": "Bobby Hunt",
   "devDependencies": {
     "elm-hot": "^1.1.4",
