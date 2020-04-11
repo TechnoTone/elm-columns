@@ -15,29 +15,11 @@ type alias Model =
     }
 
 
-initModel : () -> ( Model, Cmd Msg )
-initModel _ =
-    ( { contentView = TitleScreen
-      , gameGrid = initGameGrid
-      }
-    , Cmd.none
-    )
-
-
 type alias GameGrid =
     { width : Int
     , height : Int
     , size : Int
     , cells : Dict Coordinate Cell
-    }
-
-
-initGameGrid : GameGrid
-initGameGrid =
-    { width = 7
-    , height = 20
-    , size = 20
-    , cells = Dict.empty
     }
 
 
@@ -60,19 +42,22 @@ type Msg
     | StartGame
 
 
-main : Program () Model Msg
-main =
-    Browser.element
-        { init = initModel
-        , view = view
-        , update = update
-        , subscriptions = subscriptions
-        }
+initModel : () -> ( Model, Cmd Msg )
+initModel =
+    always <|
+        noCmd
+            { contentView = TitleScreen
+            , gameGrid = initGameGrid
+            }
 
 
-subscriptions : Model -> Sub Msg
-subscriptions model =
-    Time.every 1000 Tick
+initGameGrid : GameGrid
+initGameGrid =
+    { width = 7
+    , height = 20
+    , size = 20
+    , cells = Dict.empty
+    }
 
 
 view : Model -> Html Msg
@@ -113,7 +98,31 @@ content contentView =
             drawGameArea
 
 
-drawGameArea : Html Msg
+drawGameArea : Html msg
 drawGameArea =
     div []
         []
+
+
+main : Program () Model Msg
+main =
+    Browser.element
+        { init = initModel
+        , view = view
+        , update = update
+        , subscriptions = always <| Time.every 1000 Tick
+        }
+
+
+
+-- HELPER FUNCTIONS
+
+
+noCmd : Model -> ( Model, Cmd Msg )
+noCmd =
+    withCmd Cmd.none
+
+
+withCmd : Cmd Msg -> Model -> ( Model, Cmd Msg )
+withCmd cmd model =
+    ( model, cmd )
