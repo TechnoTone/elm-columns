@@ -4,6 +4,7 @@ import Browser
 import Html exposing (Html, button, div, h1, text)
 import Html.Attributes exposing (style)
 import Html.Events exposing (onClick)
+import Time
 
 
 type alias Model =
@@ -11,10 +12,11 @@ type alias Model =
     }
 
 
-initModel : Model
-initModel =
-    { contentView = TitleScreen
-    }
+initModel : () -> ( Model, Cmd Msg )
+initModel _ =
+    ( { contentView = TitleScreen }
+    , Cmd.none
+    )
 
 
 type ContentView
@@ -23,16 +25,23 @@ type ContentView
 
 
 type Msg
-    = StartGame
+    = Tick Time.Posix
+    | StartGame
 
 
 main : Program () Model Msg
 main =
-    Browser.sandbox
+    Browser.element
         { init = initModel
         , view = view
         , update = update
+        , subscriptions = subscriptions
         }
+
+
+subscriptions : Model -> Sub Msg
+subscriptions model =
+    Time.every 1000 Tick
 
 
 view : Model -> Html Msg
@@ -43,11 +52,14 @@ view model =
         ]
 
 
-update : Msg -> Model -> Model
+update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         StartGame ->
-            { model | contentView = Playing }
+            ( { model | contentView = Playing }, Cmd.none )
+
+        Tick posix ->
+            ( { model | contentView = TitleScreen }, Cmd.none )
 
 
 heading : Html Msg
