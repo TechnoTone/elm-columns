@@ -1,5 +1,6 @@
 module Main exposing (main)
 
+import Array
 import Browser
 import Browser.Events exposing (onAnimationFrame)
 import Dict exposing (Dict)
@@ -70,7 +71,10 @@ type Block
 
 getBlockList : List Block
 getBlockList =
-    [ Red, Green, Blue ]
+    [ Red
+    , Green
+    , Blue
+    ]
 
 
 getCellClass : Cell -> String
@@ -111,14 +115,6 @@ initGameGrid =
     }
 
 
-
---Dict.fromList
---    [ ( getCoordinate 4 1, Occupied Red )
---    , ( getCoordinate 4 2, Occupied Green )
---    , ( getCoordinate 4 3, Occupied Blue )
---    ]
-
-
 view : Model -> Browser.Document Msg
 view model =
     { title = "Columns"
@@ -144,7 +140,59 @@ update msg model =
             )
 
         Tick posix ->
-            ( model, Cmd.none )
+            case model.gamePhase of
+                Spawning ->
+                    ( model
+                        |> spawnNewBlocks posix
+                        |> setPhase Falling
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+
+spawnNewBlocks : Time.Posix -> Model -> Model
+spawnNewBlocks posix model =
+    let
+        i1 =
+            posix |> Time.posixToMillis
+
+        i2 =
+            round <| (toFloat i1 / 10)
+
+        i3 =
+            round <| (toFloat i1 / 100)
+    in
+    { model
+        | gameGrid =
+            model.gameGrid
+                |> spawnCellInGameGrid i1 (getCoordinate 4 0)
+                |> spawnCellInGameGrid i2 (getCoordinate 4 -1)
+                |> spawnCellInGameGrid i3 (getCoordinate 4 -2)
+    }
+
+
+spawnCellInGameGrid : Int -> Coordinate -> GameGrid -> GameGrid
+spawnCellInGameGrid i coord grid =
+    { grid | cells = grid.cells |> spawnCell i coord }
+
+
+spawnCell : Int -> Coordinate -> CellDict -> CellDict
+spawnCell i coord cells =
+    let
+        rnd =
+            i |> modBy (List.length getBlockList)
+
+        cell =
+            getBlockList |> Array.fromList |> Array.get rnd |> Maybe.withDefault Red
+    in
+    cells |> Dict.insert coord (Occupied cell)
+
+
+setPhase : Phase -> Model -> Model
+setPhase phase model =
+    { model | gamePhase = phase }
 
 
 heading : Html Msg
