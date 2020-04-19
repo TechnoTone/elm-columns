@@ -19,7 +19,7 @@ type alias Model =
 type Phase
     = TitleScreen
     | Spawning
-    | Falling
+    | Falling Int
     | GameOver
 
 
@@ -140,36 +140,55 @@ update msg model =
             )
 
         Tick posix ->
+            let
+                ms =
+                    Time.posixToMillis posix
+            in
             case model.gamePhase of
                 Spawning ->
                     ( model
-                        |> spawnNewBlocks posix
-                        |> setPhase Falling
+                        |> spawnNewBlocks ms
+                        |> setPhase (Falling ms)
                     , Cmd.none
                     )
+
+                Falling since ->
+                    if since + 1000 <= ms then
+                        ( model
+                            |> dropBlocks
+                            |> setPhase (Falling ms)
+                        , Cmd.none
+                        )
+
+                    else
+                        ( model
+                        , Cmd.none
+                        )
 
                 _ ->
                     ( model, Cmd.none )
 
 
-spawnNewBlocks : Time.Posix -> Model -> Model
-spawnNewBlocks posix model =
+setPhase : Phase -> Model -> Model
+setPhase phase model =
+    { model | gamePhase = phase }
+
+
+spawnNewBlocks : Int -> Model -> Model
+spawnNewBlocks millis model =
     let
-        i1 =
-            posix |> Time.posixToMillis
+        millis2 =
+            round <| (toFloat millis / 10)
 
-        i2 =
-            round <| (toFloat i1 / 10)
-
-        i3 =
-            round <| (toFloat i1 / 100)
+        millis3 =
+            round <| (toFloat millis / 100)
     in
     { model
         | gameGrid =
             model.gameGrid
-                |> spawnCellInGameGrid i1 (getCoordinate 4 0)
-                |> spawnCellInGameGrid i2 (getCoordinate 4 -1)
-                |> spawnCellInGameGrid i3 (getCoordinate 4 -2)
+                |> spawnCellInGameGrid millis (getCoordinate 4 0)
+                |> spawnCellInGameGrid millis2 (getCoordinate 4 -1)
+                |> spawnCellInGameGrid millis3 (getCoordinate 4 -2)
     }
 
 
@@ -190,9 +209,20 @@ spawnCell i coord cells =
     cells |> Dict.insert coord (Occupied cell)
 
 
-setPhase : Phase -> Model -> Model
-setPhase phase model =
-    { model | gamePhase = phase }
+dropBlocks : Model -> Model
+dropBlocks model =
+    let
+        cells =
+            model.gameGrid.cells
+
+        newCells =
+            cells
+                |> Dict.toList
+
+        newGrid =
+            model.gameGrid
+    in
+    { model | gameGrid = newGrid }
 
 
 heading : Html Msg
