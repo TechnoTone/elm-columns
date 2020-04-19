@@ -1,6 +1,6 @@
 module Main exposing (main)
 
-import Array
+import Array exposing (Array)
 import Browser
 import Browser.Events exposing (onAnimationFrame)
 import Dict exposing (Dict)
@@ -24,38 +24,11 @@ type Phase
 
 
 type alias GameGrid =
-    { width : Int
-    , height : Int
-    , cells : CellDict
-    }
+    Array Column
 
 
-type alias CellDict =
-    Dict Coordinate Cell
-
-
-type alias Coordinate =
-    String
-
-
-getCoordinate : Int -> Int -> Coordinate
-getCoordinate x y =
-    String.fromInt x ++ "," ++ String.fromInt y
-
-
-fromCoordinate : Coordinate -> ( Int, Int )
-fromCoordinate c =
-    let
-        parsed =
-            String.split "," c
-                |> List.filterMap String.toInt
-    in
-    case parsed of
-        [ x, y ] ->
-            ( x, y )
-
-        _ ->
-            ( 0, 0 )
+type alias Column =
+    Array Cell
 
 
 type Cell
@@ -109,10 +82,16 @@ initModel =
 
 initGameGrid : GameGrid
 initGameGrid =
-    { width = 7
-    , height = 20
-    , cells = Dict.empty
-    }
+    let
+        width =
+            7
+
+        height =
+            20
+    in
+    Empty
+        |> Array.repeat (height + 3)
+        |> Array.repeat width
 
 
 view : Model -> Browser.Document Msg
@@ -153,9 +132,9 @@ update msg model =
                     )
 
                 Falling since ->
-                    if since + 1000 <= ms then
+                    if since + 100 <= ms then
                         ( model
-                            |> dropBlocks
+                            |> dropBlocks ms
                             |> setPhase (Falling ms)
                         , Cmd.none
                         )
@@ -186,43 +165,109 @@ spawnNewBlocks millis model =
     { model
         | gameGrid =
             model.gameGrid
-                |> spawnCellInGameGrid millis (getCoordinate 4 0)
-                |> spawnCellInGameGrid millis2 (getCoordinate 4 -1)
-                |> spawnCellInGameGrid millis3 (getCoordinate 4 -2)
+                |> spawnCellInGameGrid millis 3 0
+                |> spawnCellInGameGrid millis2 3 1
+                |> spawnCellInGameGrid millis3 3 2
     }
 
 
-spawnCellInGameGrid : Int -> Coordinate -> GameGrid -> GameGrid
-spawnCellInGameGrid i coord grid =
-    { grid | cells = grid.cells |> spawnCell i coord }
+spawnCellInGameGrid : Int -> Int -> Int -> GameGrid -> GameGrid
+spawnCellInGameGrid i x y grid =
+    let
+        col =
+            Array.get x grid
+                |> Maybe.withDefault Array.empty
+                |> Array.set y (spawnCell i)
+    in
+    grid
+        |> Array.set x col
 
 
-spawnCell : Int -> Coordinate -> CellDict -> CellDict
-spawnCell i coord cells =
+spawnCell : Int -> Cell
+spawnCell i =
     let
         rnd =
             i |> modBy (List.length getBlockList)
 
         cell =
-            getBlockList |> Array.fromList |> Array.get rnd |> Maybe.withDefault Red
+            getBlockList
+                |> Array.fromList
+                |> Array.get rnd
+                |> Maybe.withDefault Red
     in
-    cells |> Dict.insert coord (Occupied cell)
+    Occupied cell
 
 
-dropBlocks : Model -> Model
-dropBlocks model =
+dropBlocks : Int -> Model -> Model
+dropBlocks ms model =
     let
-        cells =
-            model.gameGrid.cells
+        dropColBlocks : Column -> ( Column, Bool )
+        dropColBlocks column =
+            let
+                lowestEmptyCell =
+                    column
+                        |> Array.toIndexedList
+                        |> List.filter (\( _, cell ) -> cell == Empty)
+                        |> List.reverse
+                        |> List.head
+                        |> Maybe.map Tuple.first
+                        |> Maybe.withDefault -99
 
-        newCells =
-            cells
-                |> Dict.toList
+                cells =
+                    column
+                        |> Array.toIndexedList
+                        |> List.filter (\( _, cell ) -> cell /= Empty)
+                        |> Dict.fromList
 
-        newGrid =
-            model.gameGrid
+                falling =
+                    cells
+                        |> Dict.filter
+                            (\i _ -> i < lowestEmptyCell)
+
+                newColumn =
+                    column
+                        |> Array.toIndexedList
+                        |> List.map
+                            (\( i, cell ) ->
+                                case Dict.get (i - 1) falling of
+                                    Just fallingCell ->
+                                        fallingCell
+
+                                    _ ->
+                                        case Dict.get i falling of
+                                            Just _ ->
+                                                Empty
+
+                                            _ ->
+                                                cell
+                            )
+                        |> Array.fromList
+            in
+            ( newColumn, falling |> Dict.isEmpty |> not )
     in
-    { model | gameGrid = newGrid }
+    model.gameGrid
+        |> Array.map dropColBlocks
+        |> (\result ->
+                let
+                    columns =
+                        result |> Array.map Tuple.first
+
+                    didFall =
+                        result
+                            |> Array.toList
+                            |> List.map Tuple.second
+                            |> List.foldr (||) False
+                in
+                { model
+                    | gameGrid = columns
+                    , gamePhase =
+                        if didFall then
+                            Falling ms
+
+                        else
+                            Spawning
+                }
+           )
 
 
 heading : Html Msg
@@ -247,28 +292,38 @@ content model =
 
 drawGameArea : GameGrid -> Html msg
 drawGameArea gameGrid =
+    let
+        width =
+            gameGrid |> Array.length
+
+        height =
+            gameGrid |> Array.get 1 |> Maybe.map Array.length |> Maybe.withDefault 0
+
+        getCell x y =
+            gameGrid
+                |> Array.get (x - 1)
+                |> Maybe.andThen (Array.get (y + 2))
+                |> Maybe.withDefault Empty
+    in
     div [ class "GameArea" ]
-        (List.range 1 gameGrid.height
+        (List.range 1 (height - 3)
             |> List.map
                 (\y ->
                     div [ class "GameArea_row" ]
-                        (List.range 1 gameGrid.width
-                            |> List.map (\x -> getCoordinate x y)
-                            |> List.map (drawCell gameGrid.cells)
+                        (List.range 1 width
+                            |> List.map (\x -> getCell x y)
+                            |> List.map getCellClass
+                            |> List.map drawCell
                         )
                 )
         )
 
 
-drawCell : Dict Coordinate Cell -> Coordinate -> Html msg
-drawCell dict coord =
+drawCell : String -> Html msg
+drawCell cellClass =
     div
         [ class "GameArea_cell"
-        , class
-            (Dict.get coord dict
-                |> Maybe.withDefault Empty
-                |> getCellClass
-            )
+        , class cellClass
         ]
         []
 
