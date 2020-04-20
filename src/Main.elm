@@ -123,7 +123,7 @@ update msg model =
                 ms =
                     Time.posixToMillis posix
             in
-            case Debug.log "phase" model.gamePhase of
+            case model.gamePhase of
                 Spawning ->
                     if spawningBlocked model.gameGrid then
                         doUpdate (setPhase (GameOver ms))
@@ -328,11 +328,11 @@ drawGameArea gameGrid =
         getCell x y =
             gameGrid
                 |> Array.get (x - 1)
-                |> Maybe.andThen (Array.get (y + 2))
+                |> Maybe.andThen (Array.get (y - 1))
                 |> Maybe.withDefault Empty
     in
     div [ class "GameArea" ]
-        (List.range 1 (height - 3)
+        (List.range 1 height
             |> List.map
                 (\y ->
                     div [ class "GameArea_row" ]
@@ -399,6 +399,10 @@ body { font-family: "Roboto"; }
     display: flex;
     width: fit-content;
     height: fit-content;
+}
+
+.GameArea_row:nth-child(1), .GameArea_row:nth-child(2), .GameArea_row:nth-child(3) {
+    display: none;
 }
 
 .GameArea_cell {
