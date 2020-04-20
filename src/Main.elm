@@ -13,14 +13,26 @@ import Time
 type alias Model =
     { gameGrid : GameGrid
     , gamePhase : Phase
+    , gameData : GameData
     }
+
+
+type Msg
+    = Tick Time.Posix
+    | StartGame
 
 
 type Phase
     = TitleScreen
     | Spawning
     | Falling Int
-    | GameOver
+    | GameOver Int
+
+
+type alias GameData =
+    { speed : Int
+    , score : Int
+    }
 
 
 type alias GameGrid =
@@ -42,46 +54,27 @@ type Block
     | Blue
 
 
-getBlockList : List Block
-getBlockList =
-    [ Red
-    , Green
-    , Blue
-    ]
-
-
-getCellClass : Cell -> String
-getCellClass cell =
-    case cell of
-        Empty ->
-            "cell_empty"
-
-        Occupied Red ->
-            "cell_red"
-
-        Occupied Green ->
-            "cell_green"
-
-        Occupied Blue ->
-            "cell_blue"
-
-
-type Msg
-    = Tick Time.Posix
-    | StartGame
+allBlocks : Array Block
+allBlocks =
+    Array.fromList
+        [ Red
+        , Green
+        , Blue
+        ]
 
 
 initModel : () -> ( Model, Cmd Msg )
 initModel =
     always <|
         noCmd
-            { gameGrid = initGameGrid
+            { gameGrid = defaultGameGrid
             , gamePhase = TitleScreen
+            , gameData = defaultGameData
             }
 
 
-initGameGrid : GameGrid
-initGameGrid =
+defaultGameGrid : GameGrid
+defaultGameGrid =
     let
         width =
             7
@@ -92,6 +85,11 @@ initGameGrid =
     Empty
         |> Array.repeat (height + 3)
         |> Array.repeat width
+
+
+defaultGameData : GameData
+defaultGameData =
+    { speed = 200, score = 0 }
 
 
 view : Model -> Browser.Document Msg
@@ -109,48 +107,71 @@ view model =
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
+    let
+        noUpdate =
+            ( model, Cmd.none )
+
+        doUpdate fn =
+            ( fn model, Cmd.none )
+    in
     case msg of
         StartGame ->
-            ( { model
-                | gameGrid = initGameGrid
-                , gamePhase = Spawning
-              }
-            , Cmd.none
-            )
+            doUpdate (setGameGrid defaultGameGrid >> setPhase Spawning)
 
         Tick posix ->
             let
                 ms =
                     Time.posixToMillis posix
             in
-            case model.gamePhase of
+            case Debug.log "phase" model.gamePhase of
                 Spawning ->
-                    ( model
-                        |> spawnNewBlocks ms
-                        |> setPhase (Falling ms)
-                    , Cmd.none
-                    )
-
-                Falling since ->
-                    if since + 100 <= ms then
-                        ( model
-                            |> dropBlocks ms
-                            |> setPhase (Falling ms)
-                        , Cmd.none
-                        )
+                    if spawningBlocked model.gameGrid then
+                        doUpdate (setPhase (GameOver ms))
 
                     else
-                        ( model
-                        , Cmd.none
-                        )
+                        doUpdate (spawnNewBlocks ms >> setPhase (Falling ms))
+
+                Falling since ->
+                    if since + model.gameData.speed <= ms then
+                        doUpdate (dropBlocks ms)
+
+                    else
+                        noUpdate
+
+                GameOver since ->
+                    if since + 2000 <= ms then
+                        doUpdate (setPhase TitleScreen)
+
+                    else
+                        noUpdate
 
                 _ ->
-                    ( model, Cmd.none )
+                    noUpdate
 
 
 setPhase : Phase -> Model -> Model
 setPhase phase model =
     { model | gamePhase = phase }
+
+
+setGameGrid : GameGrid -> Model -> Model
+setGameGrid gameGrid model =
+    { model | gameGrid = gameGrid }
+
+
+setGameData : GameData -> Model -> Model
+setGameData gameData model =
+    { model | gameData = gameData }
+
+
+spawningBlocked : GameGrid -> Bool
+spawningBlocked gameGrid =
+    (gameGrid
+        |> Array.get 3
+        |> Maybe.andThen (Array.get 3)
+        |> Maybe.withDefault Empty
+    )
+        /= Empty
 
 
 spawnNewBlocks : Int -> Model -> Model
@@ -187,11 +208,10 @@ spawnCell : Int -> Cell
 spawnCell i =
     let
         rnd =
-            i |> modBy (List.length getBlockList)
+            i |> modBy (Array.length allBlocks)
 
         cell =
-            getBlockList
-                |> Array.fromList
+            allBlocks
                 |> Array.get rnd
                 |> Maybe.withDefault Red
     in
@@ -208,9 +228,8 @@ dropBlocks ms model =
                     column
                         |> Array.toIndexedList
                         |> List.filter (\( _, cell ) -> cell == Empty)
-                        |> List.reverse
-                        |> List.head
-                        |> Maybe.map Tuple.first
+                        |> List.map Tuple.first
+                        |> List.maximum
                         |> Maybe.withDefault -99
 
                 cells =
@@ -245,8 +264,7 @@ dropBlocks ms model =
             in
             ( newColumn, falling |> Dict.isEmpty |> not )
     in
-    model.gameGrid
-        |> Array.map dropColBlocks
+    Array.map dropColBlocks model.gameGrid
         |> (\result ->
                 let
                     columns =
@@ -286,6 +304,14 @@ content model =
                 , button [ onClick StartGame ] [ text "START GAME" ]
                 ]
 
+        GameOver _ ->
+            div []
+                [ drawGameArea model.gameGrid
+                , div
+                    [ class "GameOverPanel" ]
+                    [ div [] [ text "GAME OVER" ] ]
+                ]
+
         _ ->
             drawGameArea model.gameGrid
 
@@ -317,6 +343,22 @@ drawGameArea gameGrid =
                         )
                 )
         )
+
+
+getCellClass : Cell -> String
+getCellClass cell =
+    case cell of
+        Empty ->
+            "cell_empty"
+
+        Occupied Red ->
+            "cell_red"
+
+        Occupied Green ->
+            "cell_green"
+
+        Occupied Blue ->
+            "cell_blue"
 
 
 drawCell : String -> Html msg
