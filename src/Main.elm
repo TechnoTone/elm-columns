@@ -5,7 +5,7 @@ import Browser
 import Browser.Events exposing (onAnimationFrame)
 import Dict exposing (Dict)
 import Html exposing (Attribute, Html, button, div, h1, text)
-import Html.Attributes exposing (class, style)
+import Html.Attributes exposing (class, classList)
 import Html.Events exposing (onClick)
 import Time
 
@@ -94,11 +94,20 @@ defaultGameData =
 
 view : Model -> Browser.Document Msg
 view model =
+    let
+        isGameOver =
+            case model.gamePhase of
+                GameOver _ ->
+                    True
+
+                _ ->
+                    False
+    in
     { title = "Columns"
     , body =
-        [ div []
-            [ stylesheet
-            , heading
+        [ div
+            [ classList [ ( "GameOverScreen", isGameOver ) ] ]
+            [ heading
             , content model
             ]
         ]
@@ -176,19 +185,12 @@ spawningBlocked gameGrid =
 
 spawnNewBlocks : Int -> Model -> Model
 spawnNewBlocks millis model =
-    let
-        millis2 =
-            round <| (toFloat millis / 10)
-
-        millis3 =
-            round <| (toFloat millis / 100)
-    in
     { model
         | gameGrid =
             model.gameGrid
                 |> spawnCellInGameGrid millis 3 0
-                |> spawnCellInGameGrid millis2 3 1
-                |> spawnCellInGameGrid millis3 3 2
+                |> spawnCellInGameGrid (millis // 10) 3 1
+                |> spawnCellInGameGrid (millis // 100) 3 2
     }
 
 
@@ -291,8 +293,8 @@ dropBlocks ms model =
 heading : Html Msg
 heading =
     div
-        [ style "text-align" "center" ]
-        [ h1 [] [ text "BOBBY'S COLUMNS" ] ]
+        []
+        [ h1 [] [ text "COLUMNS" ] ]
 
 
 content : Model -> Html Msg
@@ -300,8 +302,7 @@ content model =
     case model.gamePhase of
         TitleScreen ->
             div []
-                [ text "Title Screen"
-                , button [ onClick StartGame ] [ text "START GAME" ]
+                [ button [ onClick StartGame ] [ text "START GAME" ]
                 ]
 
         GameOver _ ->
@@ -378,54 +379,6 @@ main =
         , update = update
         , subscriptions = always (onAnimationFrame Tick)
         }
-
-
-stylesheet : Html msg
-stylesheet =
-    Html.node "style"
-        []
-        [ text """
-@import url('https://fonts.googleapis.com/css?family=Roboto&display=swap');
-
-body { font-family: "Roboto"; }
-
-.GameArea {
-    width: fit-content;
-    height: fit-content;
-    border: 2px solid red;
-}
-
-.GameArea_row {
-    display: flex;
-    width: fit-content;
-    height: fit-content;
-}
-
-.GameArea_row:nth-child(1), .GameArea_row:nth-child(2), .GameArea_row:nth-child(3) {
-    display: none;
-}
-
-.GameArea_cell {
-    width: 20px;
-    height: 20px;
-    background: black;
-    border: 0;
-    color: white;
-}
-
-.GameArea_cell.cell_red {
-    background: red;
-}
-
-.GameArea_cell.cell_green {
-    background: green;
-}
-
-.GameArea_cell.cell_blue {
-    background: blue;
-}
-"""
-        ]
 
 
 
