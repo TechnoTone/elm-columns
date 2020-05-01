@@ -3,7 +3,6 @@ module Main exposing (main)
 import Array exposing (Array)
 import Browser
 import Browser.Events exposing (onAnimationFrame)
-import Dict exposing (Dict)
 import Html exposing (Attribute, Html, button, div, h1, text)
 import Html.Attributes exposing (class, classList)
 import Html.Events exposing (onClick)
@@ -32,11 +31,29 @@ type Phase
 type alias GameData =
     { speed : Int
     , score : Int
+    , next : Maybe NextBlock
+    }
+
+
+type alias NextBlock =
+    { blockSet : BlockSet
+    , col : Int
+    , row : Int
+    }
+
+
+type alias BlockSet =
+    { b1 : Block
+    , b2 : Block
+    , b3 : Block
     }
 
 
 type alias GameGrid =
-    Array Column
+    { width : Int
+    , height : Int
+    , columns : Array Column
+    }
 
 
 type alias Column =
@@ -83,13 +100,17 @@ defaultGameGrid =
             20
     in
     Empty
-        |> Array.repeat (height + 3)
+        |> Array.repeat height
         |> Array.repeat width
+        |> GameGrid width height
 
 
 defaultGameData : GameData
 defaultGameData =
-    { speed = 200, score = 0 }
+    { speed = 200
+    , score = 0
+    , next = Nothing
+    }
 
 
 view : Model -> Browser.Document Msg
@@ -142,7 +163,7 @@ update msg model =
 
                 Falling since ->
                     if since + model.gameData.speed <= ms then
-                        doUpdate (dropBlocks ms)
+                        doUpdate (falling ms)
 
                     else
                         noUpdate
@@ -168,15 +189,15 @@ setGameGrid gameGrid model =
     { model | gameGrid = gameGrid }
 
 
-setGameData : GameData -> Model -> Model
-setGameData gameData model =
+setGameData : Model -> GameData -> Model
+setGameData model gameData =
     { model | gameData = gameData }
 
 
 spawningBlocked : GameGrid -> Bool
 spawningBlocked gameGrid =
-    (gameGrid
-        |> Array.get 3
+    (gameGrid.columns
+        |> Array.get (gameGrid.width // 2 + 1)
         |> Maybe.andThen (Array.get 3)
         |> Maybe.withDefault Empty
     )
@@ -185,109 +206,225 @@ spawningBlocked gameGrid =
 
 spawnNewBlocks : Int -> Model -> Model
 spawnNewBlocks millis model =
-    { model
-        | gameGrid =
-            model.gameGrid
-                |> spawnCellInGameGrid millis 3 0
-                |> spawnCellInGameGrid (millis // 10) 3 1
-                |> spawnCellInGameGrid (millis // 100) 3 2
-    }
+    model
+        |> (spawnBlockSet millis |> toNextBlock model |> setNextBlock |> updateGameData)
 
 
-spawnCellInGameGrid : Int -> Int -> Int -> GameGrid -> GameGrid
-spawnCellInGameGrid i x y grid =
+spawnBlockSet : Int -> BlockSet
+spawnBlockSet i =
+    BlockSet
+        (spawnBlock i)
+        (spawnBlock (i // 10))
+        (spawnBlock (i // 100))
+
+
+spawnBlock : Int -> Block
+spawnBlock i =
+    Array.get
+        (i |> modBy (Array.length allBlocks))
+        allBlocks
+        |> Maybe.withDefault Red
+
+
+toNextBlock : Model -> BlockSet -> NextBlock
+toNextBlock model blockSet =
     let
         col =
-            Array.get x grid
-                |> Maybe.withDefault Array.empty
-                |> Array.set y (spawnCell i)
+            model.gameGrid.width // 2
     in
-    grid
-        |> Array.set x col
+    NextBlock blockSet col 0
 
 
-spawnCell : Int -> Cell
-spawnCell i =
-    let
-        rnd =
-            i |> modBy (Array.length allBlocks)
-
-        cell =
-            allBlocks
-                |> Array.get rnd
-                |> Maybe.withDefault Red
-    in
-    Occupied cell
+updateGameData : (GameData -> GameData) -> Model -> Model
+updateGameData fn model =
+    fn model.gameData |> setGameData model
 
 
-dropBlocks : Int -> Model -> Model
-dropBlocks ms model =
-    let
-        dropColBlocks : Column -> ( Column, Bool )
-        dropColBlocks column =
+setNextBlock : NextBlock -> GameData -> GameData
+setNextBlock nextBlock gameData =
+    { gameData | next = Just nextBlock }
+
+
+
+--
+--spawnCellInGameGrid : Int -> Int -> Int -> GameGrid -> GameGrid
+--spawnCellInGameGrid i x y grid =
+--    let
+--        col =
+--            Array.get x grid
+--                |> Maybe.withDefault Array.empty
+--                |> Array.set y (spawnCell i)
+--    in
+--    grid
+--        |> Array.set x col
+--
+--
+--spawnCell : Int -> Cell
+--spawnCell i =
+--    let
+--        rnd =
+--            i |> modBy (Array.length allBlocks)
+--
+--        cell =
+--            allBlocks
+--                |> Array.get rnd
+--                |> Maybe.withDefault Red
+--    in
+--    Occupied cell
+
+
+falling : Int -> Model -> Model
+falling ms model =
+    case model.gameData.next of
+        Nothing ->
+            model
+
+        Just next ->
             let
-                lowestEmptyCell =
-                    column
-                        |> Array.toIndexedList
-                        |> List.filter (\( _, cell ) -> cell == Empty)
-                        |> List.map Tuple.first
-                        |> List.maximum
-                        |> Maybe.withDefault -99
+                col =
+                    next.col
 
-                cells =
-                    column
-                        |> Array.toIndexedList
-                        |> List.filter (\( _, cell ) -> cell /= Empty)
-                        |> Dict.fromList
+                row =
+                    next.row
 
-                falling =
-                    cells
-                        |> Dict.filter
-                            (\i _ -> i < lowestEmptyCell)
+                cell =
+                    if row == model.gameGrid.height then
+                        Occupied Red
 
-                newColumn =
-                    column
-                        |> Array.toIndexedList
-                        |> List.map
-                            (\( i, cell ) ->
-                                case Dict.get (i - 1) falling of
-                                    Just fallingCell ->
-                                        fallingCell
+                    else
+                        model.gameGrid.columns |> Array.get col |> Maybe.andThen (Array.get row) |> Maybe.withDefault Empty
 
-                                    _ ->
-                                        case Dict.get i falling of
-                                            Just _ ->
-                                                Empty
-
-                                            _ ->
-                                                cell
-                            )
-                        |> Array.fromList
+                fall : GameData -> GameData
+                fall gd =
+                    { gd | next = next |> nextBlockMove Fall |> Just }
             in
-            ( newColumn, falling |> Dict.isEmpty |> not )
-    in
-    Array.map dropColBlocks model.gameGrid
-        |> (\result ->
-                let
-                    columns =
-                        result |> Array.map Tuple.first
+            case cell of
+                Empty ->
+                    model |> updateGameData fall |> setPhase (Falling ms)
 
-                    didFall =
-                        result
-                            |> Array.toList
-                            |> List.map Tuple.second
-                            |> List.foldr (||) False
-                in
-                { model
-                    | gameGrid = columns
-                    , gamePhase =
-                        if didFall then
-                            Falling ms
+                _ ->
+                    model |> landNextBlock |> setPhase Spawning
 
-                        else
-                            Spawning
-                }
-           )
+
+landNextBlock : Model -> Model
+landNextBlock model =
+    case model.gameData.next of
+        Nothing ->
+            model
+
+        Just next ->
+            let
+                col =
+                    next.col
+
+                row =
+                    next.row
+
+                { b1, b2, b3 } =
+                    next.blockSet
+
+                column =
+                    model.gameGrid.columns
+                        |> Array.get col
+                        |> Maybe.withDefault Array.empty
+                        |> Array.set (row - 3) (Occupied b1)
+                        |> Array.set (row - 2) (Occupied b2)
+                        |> Array.set (row - 1) (Occupied b3)
+            in
+            model
+                |> (model.gameGrid.columns
+                        |> Array.set col column
+                        |> GameGrid model.gameGrid.width model.gameGrid.height
+                        |> setGameGrid
+                   )
+
+
+nextBlockMove : MoveDirection -> NextBlock -> NextBlock
+nextBlockMove updateType nextBlock =
+    case updateType of
+        Fall ->
+            { nextBlock | row = nextBlock.row + 1 }
+
+        _ ->
+            nextBlock
+
+
+type MoveDirection
+    = Fall
+    | Rotate
+    | Left
+    | Right
+
+
+
+--dropBlocks : Int -> Model -> Model
+--dropBlocks ms model =
+--    let
+--        dropColBlocks : Column -> ( Column, Bool )
+--        dropColBlocks column =
+--            let
+--                lowestEmptyCell =
+--                    column
+--                        |> Array.toIndexedList
+--                        |> List.filter (\( _, cell ) -> cell == Empty)
+--                        |> List.map Tuple.first
+--                        |> List.maximum
+--                        |> Maybe.withDefault -99
+--
+--                cells =
+--                    column
+--                        |> Array.toIndexedList
+--                        |> List.filter (\( _, cell ) -> cell /= Empty)
+--                        |> Dict.fromList
+--
+--                falling =
+--                    cells
+--                        |> Dict.filter
+--                            (\i _ -> i < lowestEmptyCell)
+--
+--                newColumn =
+--                    column
+--                        |> Array.toIndexedList
+--                        |> List.map
+--                            (\( i, cell ) ->
+--                                case Dict.get (i - 1) falling of
+--                                    Just fallingCell ->
+--                                        fallingCell
+--
+--                                    _ ->
+--                                        case Dict.get i falling of
+--                                            Just _ ->
+--                                                Empty
+--
+--                                            _ ->
+--                                                cell
+--                            )
+--                        |> Array.fromList
+--            in
+--            ( newColumn, falling |> Dict.isEmpty |> not )
+--    in
+--    Array.map dropColBlocks model.gameGrid
+--        |> (\result ->
+--                let
+--                    columns =
+--                        result |> Array.map Tuple.first
+--
+--                    didFall =
+--                        result
+--                            |> Array.toList
+--                            |> List.map Tuple.second
+--                            |> List.foldr (||) False
+--                in
+--                { model
+--                    | gameGrid = columns
+--                    , gamePhase =
+--                        if didFall then
+--                            Falling ms
+--
+--                        else
+--                            Spawning
+--                }
+--           )
 
 
 heading : Html Msg
@@ -307,30 +444,43 @@ content model =
 
         GameOver _ ->
             div []
-                [ drawGameArea model.gameGrid
+                [ drawGameArea model.gameGrid model.gameData.next
                 , div
                     [ class "GameOverPanel" ]
                     [ div [] [ text "GAME OVER" ] ]
                 ]
 
         _ ->
-            drawGameArea model.gameGrid
+            drawGameArea model.gameGrid model.gameData.next
 
 
-drawGameArea : GameGrid -> Html msg
-drawGameArea gameGrid =
+drawGameArea : GameGrid -> Maybe NextBlock -> Html msg
+drawGameArea { width, height, columns } next =
     let
-        width =
-            gameGrid |> Array.length
-
-        height =
-            gameGrid |> Array.get 1 |> Maybe.map Array.length |> Maybe.withDefault 0
-
-        getCell x y =
-            gameGrid
+        getCell_ x y =
+            columns
                 |> Array.get (x - 1)
                 |> Maybe.andThen (Array.get (y - 1))
                 |> Maybe.withDefault Empty
+
+        getCell x y =
+            case next of
+                Nothing ->
+                    getCell_ x y
+
+                Just { blockSet, col, row } ->
+                    if x - 1 == col && y >= row - 2 && y <= row then
+                        if y + 2 == row then
+                            Occupied blockSet.b1
+
+                        else if y + 1 == row then
+                            Occupied blockSet.b2
+
+                        else
+                            Occupied blockSet.b3
+
+                    else
+                        getCell_ x y
     in
     div [ class "GameArea" ]
         (List.range 1 height
