@@ -26,10 +26,10 @@ type Phase
 type Msg
     = Tick Time.Posix
     | StartGame
-    | KeyDown MoveDirection
+    | PlayerAction Action
 
 
-type MoveDirection
+type Action
     = None
     | Fall
     | FallToBottom
@@ -154,21 +154,26 @@ update msg model =
         doUpdate fn =
             ( fn model, Cmd.none )
 
-        whenPlaying : (Int -> Model -> Model) -> ( Model, Cmd msg )
-        whenPlaying fn =
-            case model.gamePhase of
-                Playing ms ->
-                    doUpdate (fn ms)
-
-                _ ->
-                    noUpdate
+        startGame =
+            setGameGrid defaultGameGrid >> setPhase (Playing 0)
     in
     case msg of
         StartGame ->
-            doUpdate (setGameGrid defaultGameGrid >> setPhase (Playing 0))
+            doUpdate startGame
 
-        KeyDown action ->
-            whenPlaying <| handleAction action
+        PlayerAction action ->
+            case ( action, model.gamePhase ) of
+                ( FallToBottom, TitleScreen ) ->
+                    doUpdate startGame
+
+                ( _, Playing ms ) ->
+                    handleAction action ms model |> noCmd
+
+                ( FallToBottom, GameOver int ) ->
+                    doUpdate (setPhase TitleScreen)
+
+                _ ->
+                    noUpdate
 
         Tick posix ->
             let
@@ -191,7 +196,7 @@ update msg model =
                         noUpdate
 
                 GameOver since ->
-                    if since + 2000 <= ms then
+                    if since + 5000 <= ms then
                         doUpdate (setPhase TitleScreen)
 
                     else
@@ -201,9 +206,26 @@ update msg model =
                     noUpdate
 
 
-handleAction : MoveDirection -> Int -> Model -> Model
+handleAction : Action -> Int -> Model -> Model
 handleAction action ms model =
-    model
+    case action of
+        Fall ->
+            model
+
+        FallToBottom ->
+            model
+
+        Rotate ->
+            model
+
+        Left ->
+            model
+
+        Right ->
+            model
+
+        None ->
+            model
 
 
 setPhase : Phase -> Model -> Model
@@ -224,8 +246,8 @@ setGameData gameData model =
 spawningBlocked : GameGrid -> Bool
 spawningBlocked gameGrid =
     (gameGrid.columns
-        |> Array.get (gameGrid.width // 2 + 1)
-        |> Maybe.andThen (Array.get 3)
+        |> Array.get (gameGrid.width // 2)
+        |> Maybe.andThen (Array.get 0)
         |> Maybe.withDefault Empty
     )
         /= Empty
@@ -344,7 +366,7 @@ landNextBlock model =
                    )
 
 
-nextBlockMove : MoveDirection -> NextBlock -> NextBlock
+nextBlockMove : Action -> NextBlock -> NextBlock
 nextBlockMove updateType nextBlock =
     case updateType of
         Fall ->
@@ -464,17 +486,17 @@ subscriptions =
     always <|
         Sub.batch
             [ Browser.onAnimationFrame Tick
-            , Browser.onKeyDown (Decode.map KeyDown keyDecoder)
+            , Browser.onKeyDown (Decode.map PlayerAction keyDecoder)
             ]
 
 
-keyDecoder : Decode.Decoder MoveDirection
+keyDecoder : Decode.Decoder Action
 keyDecoder =
-    Decode.map toDirection (Decode.field "key" Decode.string)
+    Decode.map toAction (Decode.field "key" Decode.string)
 
 
-toDirection : String -> MoveDirection
-toDirection string =
+toAction : String -> Action
+toAction string =
     case String.toUpper string of
         "ARROWLEFT" ->
             Left
