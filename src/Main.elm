@@ -19,8 +19,7 @@ type alias Model =
 
 type Phase
     = TitleScreen
-    | Spawning
-    | Falling Int
+    | Playing Int
     | GameOver Int
 
 
@@ -28,7 +27,6 @@ type Msg
     = Tick Time.Posix
     | StartGame
     | KeyDown MoveDirection
-    | KeyUp MoveDirection
 
 
 type MoveDirection
@@ -156,27 +154,21 @@ update msg model =
         doUpdate fn =
             ( fn model, Cmd.none )
 
-        whenFalling fn =
+        whenPlaying : (Int -> Model -> Model) -> ( Model, Cmd msg )
+        whenPlaying fn =
             case model.gamePhase of
-                Falling _ ->
-                    fn
+                Playing ms ->
+                    doUpdate (fn ms)
 
                 _ ->
                     noUpdate
     in
     case msg of
         StartGame ->
-            doUpdate (setGameGrid defaultGameGrid >> setPhase Spawning)
+            doUpdate (setGameGrid defaultGameGrid >> setPhase (Playing 0))
 
         KeyDown action ->
-            let
-                _ =
-                    Debug.log "KeyDown" action
-            in
-            whenFalling noUpdate
-
-        KeyUp action ->
-            noUpdate
+            whenPlaying <| handleAction action
 
         Tick posix ->
             let
@@ -184,15 +176,15 @@ update msg model =
                     Time.posixToMillis posix
             in
             case model.gamePhase of
-                Spawning ->
-                    if spawningBlocked model.gameGrid then
-                        doUpdate (setPhase (GameOver ms))
+                Playing since ->
+                    if model.gameData.next == Nothing then
+                        if spawningBlocked model.gameGrid then
+                            doUpdate (setPhase (GameOver ms))
 
-                    else
-                        doUpdate (spawnNewBlocks ms >> setPhase (Falling ms))
+                        else
+                            doUpdate (spawnNewBlocks ms >> setPhase (Playing ms))
 
-                Falling since ->
-                    if since + model.gameData.speed <= ms then
+                    else if since + model.gameData.speed <= ms then
                         doUpdate (falling ms)
 
                     else
@@ -209,6 +201,11 @@ update msg model =
                     noUpdate
 
 
+handleAction : MoveDirection -> Int -> Model -> Model
+handleAction action ms model =
+    model
+
+
 setPhase : Phase -> Model -> Model
 setPhase phase model =
     { model | gamePhase = phase }
@@ -219,8 +216,8 @@ setGameGrid gameGrid model =
     { model | gameGrid = gameGrid }
 
 
-setGameData : Model -> GameData -> Model
-setGameData model gameData =
+setGameData : GameData -> Model -> Model
+setGameData gameData model =
     { model | gameData = gameData }
 
 
@@ -267,12 +264,17 @@ toNextBlock model blockSet =
 
 updateGameData : (GameData -> GameData) -> Model -> Model
 updateGameData fn model =
-    fn model.gameData |> setGameData model
+    model |> (fn model.gameData |> setGameData)
 
 
 setNextBlock : NextBlock -> GameData -> GameData
 setNextBlock nextBlock gameData =
     { gameData | next = Just nextBlock }
+
+
+clearNextBlock : GameData -> GameData
+clearNextBlock gameData =
+    { gameData | next = Nothing }
 
 
 falling : Int -> Model -> Model
@@ -302,10 +304,10 @@ falling ms model =
             in
             case cell of
                 Empty ->
-                    model |> updateGameData fall |> setPhase (Falling ms)
+                    model |> updateGameData fall |> setPhase (Playing ms)
 
                 _ ->
-                    model |> landNextBlock |> setPhase Spawning
+                    model |> landNextBlock
 
 
 landNextBlock : Model -> Model
@@ -334,6 +336,7 @@ landNextBlock model =
                         |> Array.set (row - 1) (Occupied b3)
             in
             model
+                |> (model.gameData |> clearNextBlock |> setGameData)
                 |> (model.gameGrid.columns
                         |> Array.set col column
                         |> GameGrid model.gameGrid.width model.gameGrid.height
@@ -457,12 +460,12 @@ main =
 
 
 subscriptions : Model -> Sub Msg
-subscriptions model =
-    Sub.batch
-        [ Browser.onAnimationFrame Tick
-        , Browser.onKeyDown (Decode.map KeyDown keyDecoder)
-        , Browser.onKeyUp (Decode.map KeyUp keyDecoder)
-        ]
+subscriptions =
+    always <|
+        Sub.batch
+            [ Browser.onAnimationFrame Tick
+            , Browser.onKeyDown (Decode.map KeyDown keyDecoder)
+            ]
 
 
 keyDecoder : Decode.Decoder MoveDirection
