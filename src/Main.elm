@@ -31,9 +31,9 @@ type Msg
 
 type Action
     = None
-    | Fall
-    | FallToBottom
-    | Rotate
+    | RotateDown
+    | Drop
+    | RotateUp
     | Left
     | Right
 
@@ -163,13 +163,13 @@ update msg model =
 
         PlayerAction action ->
             case ( action, model.gamePhase ) of
-                ( FallToBottom, TitleScreen ) ->
+                ( Drop, TitleScreen ) ->
                     doUpdate startGame
 
                 ( _, Playing ms ) ->
                     handleAction action ms model |> noCmd
 
-                ( FallToBottom, GameOver int ) ->
+                ( Drop, GameOver int ) ->
                     doUpdate (setPhase TitleScreen)
 
                 _ ->
@@ -209,13 +209,13 @@ update msg model =
 handleAction : Action -> Int -> Model -> Model
 handleAction action ms model =
     case action of
-        Fall ->
+        Drop ->
+            model |> setPhase (Playing 0)
+
+        RotateUp ->
             model
 
-        FallToBottom ->
-            model
-
-        Rotate ->
+        RotateDown ->
             model
 
         Left ->
@@ -322,7 +322,7 @@ falling ms model =
 
                 fall : GameData -> GameData
                 fall gd =
-                    { gd | next = next |> nextBlockMove Fall |> Just }
+                    { gd | next = next |> nextBlockMove RotateDown |> Just }
             in
             case cell of
                 Empty ->
@@ -369,7 +369,7 @@ landNextBlock model =
 nextBlockMove : Action -> NextBlock -> NextBlock
 nextBlockMove updateType nextBlock =
     case updateType of
-        Fall ->
+        RotateDown ->
             { nextBlock | row = nextBlock.row + 1 }
 
         _ ->
@@ -511,19 +511,19 @@ toAction string =
             Right
 
         "ARROWUP" ->
-            Rotate
+            RotateUp
 
         "W" ->
-            Rotate
+            RotateUp
 
         "ARROWDOWN" ->
-            Fall
+            RotateDown
 
         "S" ->
-            Fall
+            RotateDown
 
         " " ->
-            FallToBottom
+            Drop
 
         _ ->
             None
