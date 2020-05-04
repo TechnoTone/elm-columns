@@ -2,10 +2,11 @@ module Main exposing (main)
 
 import Array exposing (Array)
 import Browser
-import Browser.Events exposing (onAnimationFrame)
+import Browser.Events as Browser
 import Html exposing (Attribute, Html, button, div, h1, text)
 import Html.Attributes exposing (class, classList)
 import Html.Events exposing (onClick)
+import Json.Decode as Decode
 import Time
 
 
@@ -16,16 +17,27 @@ type alias Model =
     }
 
 
-type Msg
-    = Tick Time.Posix
-    | StartGame
-
-
 type Phase
     = TitleScreen
     | Spawning
     | Falling Int
     | GameOver Int
+
+
+type Msg
+    = Tick Time.Posix
+    | StartGame
+    | KeyDown MoveDirection
+    | KeyUp MoveDirection
+
+
+type MoveDirection
+    = None
+    | Fall
+    | FallToBottom
+    | Rotate
+    | Left
+    | Right
 
 
 type alias GameData =
@@ -143,10 +155,28 @@ update msg model =
 
         doUpdate fn =
             ( fn model, Cmd.none )
+
+        whenFalling fn =
+            case model.gamePhase of
+                Falling _ ->
+                    fn
+
+                _ ->
+                    noUpdate
     in
     case msg of
         StartGame ->
             doUpdate (setGameGrid defaultGameGrid >> setPhase Spawning)
+
+        KeyDown action ->
+            let
+                _ =
+                    Debug.log "KeyDown" action
+            in
+            whenFalling noUpdate
+
+        KeyUp action ->
+            noUpdate
 
         Tick posix ->
             let
@@ -245,34 +275,6 @@ setNextBlock nextBlock gameData =
     { gameData | next = Just nextBlock }
 
 
-
---
---spawnCellInGameGrid : Int -> Int -> Int -> GameGrid -> GameGrid
---spawnCellInGameGrid i x y grid =
---    let
---        col =
---            Array.get x grid
---                |> Maybe.withDefault Array.empty
---                |> Array.set y (spawnCell i)
---    in
---    grid
---        |> Array.set x col
---
---
---spawnCell : Int -> Cell
---spawnCell i =
---    let
---        rnd =
---            i |> modBy (Array.length allBlocks)
---
---        cell =
---            allBlocks
---                |> Array.get rnd
---                |> Maybe.withDefault Red
---    in
---    Occupied cell
-
-
 falling : Int -> Model -> Model
 falling ms model =
     case model.gameData.next of
@@ -349,84 +351,6 @@ nextBlockMove updateType nextBlock =
             nextBlock
 
 
-type MoveDirection
-    = Fall
-    | Rotate
-    | Left
-    | Right
-
-
-
---dropBlocks : Int -> Model -> Model
---dropBlocks ms model =
---    let
---        dropColBlocks : Column -> ( Column, Bool )
---        dropColBlocks column =
---            let
---                lowestEmptyCell =
---                    column
---                        |> Array.toIndexedList
---                        |> List.filter (\( _, cell ) -> cell == Empty)
---                        |> List.map Tuple.first
---                        |> List.maximum
---                        |> Maybe.withDefault -99
---
---                cells =
---                    column
---                        |> Array.toIndexedList
---                        |> List.filter (\( _, cell ) -> cell /= Empty)
---                        |> Dict.fromList
---
---                falling =
---                    cells
---                        |> Dict.filter
---                            (\i _ -> i < lowestEmptyCell)
---
---                newColumn =
---                    column
---                        |> Array.toIndexedList
---                        |> List.map
---                            (\( i, cell ) ->
---                                case Dict.get (i - 1) falling of
---                                    Just fallingCell ->
---                                        fallingCell
---
---                                    _ ->
---                                        case Dict.get i falling of
---                                            Just _ ->
---                                                Empty
---
---                                            _ ->
---                                                cell
---                            )
---                        |> Array.fromList
---            in
---            ( newColumn, falling |> Dict.isEmpty |> not )
---    in
---    Array.map dropColBlocks model.gameGrid
---        |> (\result ->
---                let
---                    columns =
---                        result |> Array.map Tuple.first
---
---                    didFall =
---                        result
---                            |> Array.toList
---                            |> List.map Tuple.second
---                            |> List.foldr (||) False
---                in
---                { model
---                    | gameGrid = columns
---                    , gamePhase =
---                        if didFall then
---                            Falling ms
---
---                        else
---                            Spawning
---                }
---           )
-
-
 heading : Html Msg
 heading =
     div
@@ -482,7 +406,8 @@ drawGameArea { width, height, columns } next =
                     else
                         getCell_ x y
     in
-    div [ class "GameArea" ]
+    div
+        [ class "GameArea" ]
         (List.range 1 height
             |> List.map
                 (\y ->
@@ -527,8 +452,56 @@ main =
         { init = initModel
         , view = view
         , update = update
-        , subscriptions = always (onAnimationFrame Tick)
+        , subscriptions = subscriptions
         }
+
+
+subscriptions : Model -> Sub Msg
+subscriptions model =
+    Sub.batch
+        [ Browser.onAnimationFrame Tick
+        , Browser.onKeyDown (Decode.map KeyDown keyDecoder)
+        , Browser.onKeyUp (Decode.map KeyUp keyDecoder)
+        ]
+
+
+keyDecoder : Decode.Decoder MoveDirection
+keyDecoder =
+    Decode.map toDirection (Decode.field "key" Decode.string)
+
+
+toDirection : String -> MoveDirection
+toDirection string =
+    case String.toUpper string of
+        "ARROWLEFT" ->
+            Left
+
+        "A" ->
+            Left
+
+        "ARROWRIGHT" ->
+            Right
+
+        "D" ->
+            Right
+
+        "ARROWUP" ->
+            Rotate
+
+        "W" ->
+            Rotate
+
+        "ARROWDOWN" ->
+            Fall
+
+        "S" ->
+            Fall
+
+        " " ->
+            FallToBottom
+
+        _ ->
+            None
 
 
 
