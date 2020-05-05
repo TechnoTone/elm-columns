@@ -231,7 +231,6 @@ handleAction action ms model =
             in
             case action of
                 DropAction ->
-                    --model |> setPhase (Playing 0)
                     model |> updateGameData (setNextBlock (nextBlockUpdate DropToBottom next model)) |> setPhase (Playing 0)
 
                 RotateUpAction ->
@@ -241,10 +240,10 @@ handleAction action ms model =
                     model
 
                 LeftAction ->
-                    model
+                    model |> updateGameData (setNextBlock (nextBlockUpdate MoveLeft next model))
 
                 RightAction ->
-                    model
+                    model |> updateGameData (setNextBlock (nextBlockUpdate MoveRight next model))
 
                 None ->
                     model
@@ -303,7 +302,7 @@ toNextBlock model blockSet =
         col =
             model.gameGrid.width // 2
     in
-    NextBlock blockSet col 1
+    NextBlock blockSet col 0
 
 
 updateGameData : (GameData -> GameData) -> Model -> Model
@@ -335,53 +334,19 @@ falling ms model =
                 row =
                     next.row
 
-                cell =
-                    if row == model.gameGrid.height then
+                cellBelow =
+                    if row == model.gameGrid.height - 1 then
                         Occupied Red
 
                     else
-                        model.gameGrid.columns |> Array.get col |> Maybe.andThen (Array.get row) |> Maybe.withDefault Empty
+                        model.gameGrid.columns |> Array.get col |> Maybe.andThen (Array.get (row + 1)) |> Maybe.withDefault Empty
             in
-            case cell of
+            case cellBelow of
                 Empty ->
                     model |> updateGameData (setNextBlock (nextBlockUpdate FallOneRow next model)) |> setPhase (Playing ms)
 
                 _ ->
-                    model |> landNextBlock
-
-
-landNextBlock : Model -> Model
-landNextBlock model =
-    case model.gameData.next of
-        Nothing ->
-            model
-
-        Just next ->
-            let
-                col =
-                    next.col
-
-                row =
-                    next.row
-
-                { b1, b2, b3 } =
-                    next.blockSet
-
-                column =
-                    model.gameGrid.columns
-                        |> Array.get col
-                        |> Maybe.withDefault Array.empty
-                        |> Array.set (row - 3) (Occupied b1)
-                        |> Array.set (row - 2) (Occupied b2)
-                        |> Array.set (row - 1) (Occupied b3)
-            in
-            model
-                |> (model.gameData |> clearNextBlock |> setGameData)
-                |> (model.gameGrid.columns
-                        |> Array.set col column
-                        |> GameGrid model.gameGrid.width model.gameGrid.height
-                        |> setGameGrid
-                   )
+                    model |> landNextBlock next
 
 
 nextBlockUpdate : NextBlockUpdates -> NextBlock -> Model -> NextBlock
@@ -390,17 +355,28 @@ nextBlockUpdate updateType nextBlock model =
         cellIsEmpty cell =
             cell == Empty
 
+        colCells : Int -> Array Cell
+        colCells col =
+            model.gameGrid.columns |> Array.get col |> Maybe.withDefault Array.empty
+
+        colCell : Array Cell -> Int -> Cell
+        colCell cells row =
+            cells |> Array.get row |> Maybe.withDefault Empty
+
         bottomEmptyCell : Int -> Int
         bottomEmptyCell col =
-            model.gameGrid.columns
-                |> Array.get col
-                |> Maybe.withDefault Array.empty
+            colCells col
                 |> Array.toIndexedList
                 |> List.filter (Tuple.second >> cellIsEmpty)
                 |> List.map Tuple.first
                 |> List.reverse
                 |> List.head
                 |> Maybe.withDefault 0
+
+        canMoveTo col =
+            (col >= 0)
+                && (col <= (model.gameGrid.width - 1))
+                && ((colCells col |> Array.get nextBlock.row |> Maybe.withDefault Empty) == Empty)
     in
     case updateType of
         FallOneRow ->
@@ -409,8 +385,54 @@ nextBlockUpdate updateType nextBlock model =
         DropToBottom ->
             { nextBlock | row = bottomEmptyCell nextBlock.col }
 
-        _ ->
+        RotateUp ->
             nextBlock
+
+        RotateDown ->
+            nextBlock
+
+        MoveLeft ->
+            if canMoveTo (nextBlock.col - 1) then
+                { nextBlock | col = nextBlock.col - 1 }
+
+            else
+                nextBlock
+
+        MoveRight ->
+            if canMoveTo (nextBlock.col + 1) then
+                { nextBlock | col = nextBlock.col + 1 }
+
+            else
+                nextBlock
+
+
+landNextBlock : NextBlock -> Model -> Model
+landNextBlock next model =
+    let
+        col =
+            next.col
+
+        row =
+            next.row
+
+        { b1, b2, b3 } =
+            next.blockSet
+
+        column =
+            model.gameGrid.columns
+                |> Array.get col
+                |> Maybe.withDefault Array.empty
+                |> Array.set (row - 2) (Occupied b1)
+                |> Array.set (row - 1) (Occupied b2)
+                |> Array.set (row - 0) (Occupied b3)
+    in
+    model
+        |> (model.gameData |> clearNextBlock |> setGameData)
+        |> (model.gameGrid.columns
+                |> Array.set col column
+                |> GameGrid model.gameGrid.width model.gameGrid.height
+                |> setGameGrid
+           )
 
 
 heading : Html Msg
@@ -445,8 +467,8 @@ drawGameArea { width, height, columns } next =
     let
         getCell_ x y =
             columns
-                |> Array.get (x - 1)
-                |> Maybe.andThen (Array.get (y - 1))
+                |> Array.get x
+                |> Maybe.andThen (Array.get y)
                 |> Maybe.withDefault Empty
 
         getCell x y =
@@ -455,7 +477,7 @@ drawGameArea { width, height, columns } next =
                     getCell_ x y
 
                 Just { blockSet, col, row } ->
-                    if x - 1 == col && y >= row - 2 && y <= row then
+                    if x == col && y >= row - 2 && y <= row then
                         if y + 2 == row then
                             Occupied blockSet.b1
 
@@ -470,11 +492,11 @@ drawGameArea { width, height, columns } next =
     in
     div
         [ class "GameArea" ]
-        (List.range 1 height
+        (List.range 0 (height - 1)
             |> List.map
                 (\y ->
                     div [ class "GameArea_row" ]
-                        (List.range 1 width
+                        (List.range 0 (width - 1)
                             |> List.map (\x -> getCell x y)
                             |> List.map getCellClass
                             |> List.map drawCell
