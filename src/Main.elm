@@ -176,7 +176,7 @@ update msg model =
                     doUpdate startGame
 
                 ( _, Playing ms ) ->
-                    handleAction action ms model |> noCmd
+                    handleAction action model |> noCmd
 
                 ( DropAction, GameOver int ) ->
                     doUpdate (setPhase TitleScreen)
@@ -215,38 +215,31 @@ update msg model =
                     noUpdate
 
 
-handleAction : PlayerAction -> Int -> Model -> Model
-handleAction action ms model =
-    case model.gameData.next of
-        Nothing ->
+handleAction : PlayerAction -> Model -> Model
+handleAction action model =
+    let
+        updateFn : NextBlockUpdates -> NextBlock -> Model
+        updateFn updateType next =
+            model |> updateGameData (setNextBlock (nextBlockUpdate updateType next model))
+    in
+    case ( action, model.gameData.next ) of
+        ( DropAction, Just next ) ->
+            updateFn DropToBottom next |> setPhase (Playing 0)
+
+        ( RotateUpAction, Just next ) ->
+            updateFn RotateUp next
+
+        ( RotateDownAction, Just next ) ->
+            updateFn RotateDown next
+
+        ( LeftAction, Just next ) ->
+            updateFn MoveLeft next
+
+        ( RightAction, Just next ) ->
+            updateFn MoveRight next
+
+        _ ->
             model
-
-        Just next ->
-            let
-                col =
-                    next.col
-
-                row =
-                    next.row
-            in
-            case action of
-                DropAction ->
-                    model |> updateGameData (setNextBlock (nextBlockUpdate DropToBottom next model)) |> setPhase (Playing 0)
-
-                RotateUpAction ->
-                    model
-
-                RotateDownAction ->
-                    model
-
-                LeftAction ->
-                    model |> updateGameData (setNextBlock (nextBlockUpdate MoveLeft next model))
-
-                RightAction ->
-                    model |> updateGameData (setNextBlock (nextBlockUpdate MoveRight next model))
-
-                None ->
-                    model
 
 
 setPhase : Phase -> Model -> Model
@@ -359,10 +352,6 @@ nextBlockUpdate updateType nextBlock model =
         colCells col =
             model.gameGrid.columns |> Array.get col |> Maybe.withDefault Array.empty
 
-        colCell : Array Cell -> Int -> Cell
-        colCell cells row =
-            cells |> Array.get row |> Maybe.withDefault Empty
-
         bottomEmptyCell : Int -> Int
         bottomEmptyCell col =
             colCells col
@@ -377,6 +366,14 @@ nextBlockUpdate updateType nextBlock model =
             (col >= 0)
                 && (col <= (model.gameGrid.width - 1))
                 && ((colCells col |> Array.get nextBlock.row |> Maybe.withDefault Empty) == Empty)
+
+        rotateUp : BlockSet -> BlockSet
+        rotateUp blockSet =
+            BlockSet blockSet.b2 blockSet.b3 blockSet.b1
+
+        rotateDown : BlockSet -> BlockSet
+        rotateDown blockSet =
+            BlockSet blockSet.b3 blockSet.b1 blockSet.b2
     in
     case updateType of
         FallOneRow ->
@@ -386,10 +383,10 @@ nextBlockUpdate updateType nextBlock model =
             { nextBlock | row = bottomEmptyCell nextBlock.col }
 
         RotateUp ->
-            nextBlock
+            { nextBlock | blockSet = rotateUp nextBlock.blockSet }
 
         RotateDown ->
-            nextBlock
+            { nextBlock | blockSet = rotateDown nextBlock.blockSet }
 
         MoveLeft ->
             if canMoveTo (nextBlock.col - 1) then
