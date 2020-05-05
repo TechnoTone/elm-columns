@@ -26,16 +26,25 @@ type Phase
 type Msg
     = Tick Time.Posix
     | StartGame
-    | PlayerAction Action
+    | PlayerAction PlayerAction
 
 
-type Action
+type PlayerAction
     = None
-    | RotateDown
-    | Drop
+    | DropAction
+    | RotateUpAction
+    | RotateDownAction
+    | LeftAction
+    | RightAction
+
+
+type NextBlockUpdates
+    = FallOneRow
+    | DropToBottom
     | RotateUp
-    | Left
-    | Right
+    | RotateDown
+    | MoveLeft
+    | MoveRight
 
 
 type alias GameData =
@@ -163,13 +172,13 @@ update msg model =
 
         PlayerAction action ->
             case ( action, model.gamePhase ) of
-                ( Drop, TitleScreen ) ->
+                ( DropAction, TitleScreen ) ->
                     doUpdate startGame
 
                 ( _, Playing ms ) ->
                     handleAction action ms model |> noCmd
 
-                ( Drop, GameOver int ) ->
+                ( DropAction, GameOver int ) ->
                     doUpdate (setPhase TitleScreen)
 
                 _ ->
@@ -206,26 +215,39 @@ update msg model =
                     noUpdate
 
 
-handleAction : Action -> Int -> Model -> Model
+handleAction : PlayerAction -> Int -> Model -> Model
 handleAction action ms model =
-    case action of
-        Drop ->
-            model |> setPhase (Playing 0)
-
-        RotateUp ->
+    case model.gameData.next of
+        Nothing ->
             model
 
-        RotateDown ->
-            model
+        Just next ->
+            let
+                col =
+                    next.col
 
-        Left ->
-            model
+                row =
+                    next.row
+            in
+            case action of
+                DropAction ->
+                    --model |> setPhase (Playing 0)
+                    model |> updateGameData (setNextBlock (nextBlockUpdate DropToBottom next model)) |> setPhase (Playing 0)
 
-        Right ->
-            model
+                RotateUpAction ->
+                    model
 
-        None ->
-            model
+                RotateDownAction ->
+                    model
+
+                LeftAction ->
+                    model
+
+                RightAction ->
+                    model
+
+                None ->
+                    model
 
 
 setPhase : Phase -> Model -> Model
@@ -281,7 +303,7 @@ toNextBlock model blockSet =
         col =
             model.gameGrid.width // 2
     in
-    NextBlock blockSet col 0
+    NextBlock blockSet col 1
 
 
 updateGameData : (GameData -> GameData) -> Model -> Model
@@ -319,14 +341,10 @@ falling ms model =
 
                     else
                         model.gameGrid.columns |> Array.get col |> Maybe.andThen (Array.get row) |> Maybe.withDefault Empty
-
-                fall : GameData -> GameData
-                fall gd =
-                    { gd | next = next |> nextBlockMove RotateDown |> Just }
             in
             case cell of
                 Empty ->
-                    model |> updateGameData fall |> setPhase (Playing ms)
+                    model |> updateGameData (setNextBlock (nextBlockUpdate FallOneRow next model)) |> setPhase (Playing ms)
 
                 _ ->
                     model |> landNextBlock
@@ -366,11 +384,30 @@ landNextBlock model =
                    )
 
 
-nextBlockMove : Action -> NextBlock -> NextBlock
-nextBlockMove updateType nextBlock =
+nextBlockUpdate : NextBlockUpdates -> NextBlock -> Model -> NextBlock
+nextBlockUpdate updateType nextBlock model =
+    let
+        cellIsEmpty cell =
+            cell == Empty
+
+        bottomEmptyCell : Int -> Int
+        bottomEmptyCell col =
+            model.gameGrid.columns
+                |> Array.get col
+                |> Maybe.withDefault Array.empty
+                |> Array.toIndexedList
+                |> List.filter (Tuple.second >> cellIsEmpty)
+                |> List.map Tuple.first
+                |> List.reverse
+                |> List.head
+                |> Maybe.withDefault 0
+    in
     case updateType of
-        RotateDown ->
+        FallOneRow ->
             { nextBlock | row = nextBlock.row + 1 }
+
+        DropToBottom ->
+            { nextBlock | row = bottomEmptyCell nextBlock.col }
 
         _ ->
             nextBlock
@@ -490,40 +527,40 @@ subscriptions =
             ]
 
 
-keyDecoder : Decode.Decoder Action
+keyDecoder : Decode.Decoder PlayerAction
 keyDecoder =
     Decode.map toAction (Decode.field "key" Decode.string)
 
 
-toAction : String -> Action
+toAction : String -> PlayerAction
 toAction string =
     case String.toUpper string of
         "ARROWLEFT" ->
-            Left
+            LeftAction
 
         "A" ->
-            Left
+            LeftAction
 
         "ARROWRIGHT" ->
-            Right
+            RightAction
 
         "D" ->
-            Right
+            RightAction
 
         "ARROWUP" ->
-            RotateUp
+            RotateUpAction
 
         "W" ->
-            RotateUp
+            RotateUpAction
 
         "ARROWDOWN" ->
-            RotateDown
+            RotateDownAction
 
         "S" ->
-            RotateDown
+            RotateDownAction
 
         " " ->
-            Drop
+            DropAction
 
         _ ->
             None
