@@ -19,8 +19,26 @@ type alias Model =
 
 type Phase
     = TitleScreen
-    | Playing Int
+    | Playing Int PlayingPhase
     | GameOver Int
+
+
+type PlayingPhase
+    = Controlling
+    | ExplodingPhase (List ExplodingCell)
+    | Collapsing
+
+
+type alias ExplodingCell =
+    { col : Int
+    , row : Int
+    , state : ExplodingState
+    }
+
+
+type ExplodingState
+    = Waiting
+    | Exploding Int
 
 
 type Msg
@@ -164,7 +182,7 @@ update msg model =
             ( fn model, Cmd.none )
 
         startGame =
-            setGameGrid defaultGameGrid >> setPhase (Playing 0)
+            setGameGrid defaultGameGrid >> setPhase (Playing 0 Controlling)
     in
     case msg of
         StartGame ->
@@ -175,10 +193,10 @@ update msg model =
                 ( DropAction, TitleScreen ) ->
                     doUpdate startGame
 
-                ( _, Playing ms ) ->
+                ( _, Playing _ Controlling ) ->
                     handleAction action model |> noCmd
 
-                ( DropAction, GameOver int ) ->
+                ( DropAction, GameOver _ ) ->
                     doUpdate (setPhase TitleScreen)
 
                 _ ->
@@ -190,13 +208,13 @@ update msg model =
                     Time.posixToMillis posix
             in
             case model.gamePhase of
-                Playing since ->
+                Playing since _ ->
                     if model.gameData.next == Nothing then
                         if spawningBlocked model.gameGrid then
                             doUpdate (setPhase (GameOver ms))
 
                         else
-                            doUpdate (spawnNewBlocks ms >> setPhase (Playing ms))
+                            doUpdate (spawnNewBlocks ms >> setPhase (Playing ms Controlling))
 
                     else if since + model.gameData.speed <= ms then
                         doUpdate (falling ms)
@@ -224,7 +242,7 @@ handleAction action model =
     in
     case ( action, model.gameData.next ) of
         ( DropAction, Just next ) ->
-            updateFn DropToBottom next |> setPhase (Playing 0)
+            updateFn DropToBottom next |> setPhase (Playing 0 Controlling)
 
         ( RotateUpAction, Just next ) ->
             updateFn RotateUp next
@@ -336,7 +354,7 @@ falling ms model =
             in
             case cellBelow of
                 Empty ->
-                    model |> updateGameData (setNextBlock (nextBlockUpdate FallOneRow next model)) |> setPhase (Playing ms)
+                    model |> updateGameData (setNextBlock (nextBlockUpdate FallOneRow next model)) |> setPhase (Playing ms Controlling)
 
                 _ ->
                     model |> landNextBlock next
