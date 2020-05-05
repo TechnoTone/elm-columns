@@ -3,7 +3,7 @@ module Main exposing (main)
 import Array exposing (Array)
 import Browser
 import Browser.Events as Browser
-import Html exposing (Attribute, Html, button, div, h1, text)
+import Html exposing (Attribute, Html, button, div, h1, h2, h3, text)
 import Html.Attributes exposing (class, classList)
 import Html.Events exposing (onClick)
 import Json.Decode as Decode
@@ -25,7 +25,7 @@ type Phase
 
 type PlayingPhase
     = Controlling
-    | ExplodingPhase (List ExplodingCell)
+    | Exploding (List ExplodingCell)
     | Collapsing
 
 
@@ -38,7 +38,7 @@ type alias ExplodingCell =
 
 type ExplodingState
     = Waiting
-    | Exploding Int
+    | ExplodingSince Int
 
 
 type Msg
@@ -208,7 +208,7 @@ update msg model =
                     Time.posixToMillis posix
             in
             case model.gamePhase of
-                Playing since _ ->
+                Playing since Controlling ->
                     if model.gameData.next == Nothing then
                         if spawningBlocked model.gameGrid then
                             doUpdate (setPhase (GameOver ms))
@@ -221,6 +221,9 @@ update msg model =
 
                     else
                         noUpdate
+
+                Playing since (Exploding cells) ->
+                    noUpdate
 
                 GameOver since ->
                     if since + 5000 <= ms then
@@ -467,14 +470,18 @@ content model =
 
         GameOver _ ->
             div []
-                [ drawGameArea model.gameGrid model.gameData.next
+                [ gameInfo model.gameData
+                , drawGameArea model.gameGrid model.gameData.next
                 , div
                     [ class "GameOverPanel" ]
                     [ div [] [ text "GAME OVER" ] ]
                 ]
 
         _ ->
-            drawGameArea model.gameGrid model.gameData.next
+            div []
+                [ gameInfo model.gameData
+                , drawGameArea model.gameGrid model.gameData.next
+                ]
 
 
 drawGameArea : GameGrid -> Maybe NextBlock -> Html msg
@@ -518,6 +525,13 @@ drawGameArea { width, height, columns } next =
                         )
                 )
         )
+
+
+gameInfo : GameData -> Html msg
+gameInfo data =
+    div
+        [ class "GameInfo" ]
+        [ h3 [] [ text ("SCORE: " ++ String.fromInt data.score) ] ]
 
 
 getCellClass : Cell -> String
