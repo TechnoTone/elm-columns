@@ -80,63 +80,56 @@ update msg model =
         startGame =
             setGameGrid GameGrid.defaultGameGrid >> setPhase (Playing 0 Controlling)
     in
-    case msg of
-        StartGame ->
+    case ( msg, model.gamePhase ) of
+        ( StartGame, _ ) ->
             doUpdate startGame
 
-        PlayerAction action ->
-            case ( model.gamePhase, action ) of
-                ( TitleScreen, DropAction ) ->
-                    doUpdate startGame
+        ( PlayerAction DropAction, TitleScreen ) ->
+            doUpdate startGame
 
-                ( Playing _ Controlling, _ ) ->
-                    ( handleAction action model, Cmd.none )
+        ( PlayerAction action, Playing _ Controlling ) ->
+            ( handleAction action model, Cmd.none )
 
-                ( GameOver _, DropAction ) ->
-                    doUpdate (setPhase TitleScreen)
+        ( PlayerAction DropAction, GameOver _ ) ->
+            doUpdate (setPhase TitleScreen)
 
-                _ ->
-                    noUpdate
-
-        Tick posix ->
+        ( Tick posix, Playing since Controlling ) ->
             let
                 ms =
                     Time.posixToMillis posix
             in
-            case model.gamePhase of
-                Playing since Controlling ->
-                    if model.gameGrid.next == Nothing then
-                        let
-                            cells =
-                                GameGrid.cellsToEliminate model.gameGrid
-                        in
-                        if not <| List.isEmpty cells then
-                            noUpdate
-
-                        else if GameGrid.spawningBlocked model.gameGrid then
-                            doUpdate (setPhase (GameOver ms))
-
-                        else
-                            doUpdate (updateGameGrid (GameGrid.spawnNewBlocks ms) >> setPhase (Playing ms Controlling))
-
-                    else if since + model.gameData.speed <= ms then
-                        doUpdate (updateGameGrid (GameGrid.falling ms) >> setPhase (Playing ms Controlling))
-
-                    else
-                        noUpdate
-
-                Playing since (Eliminating cells) ->
+            if model.gameGrid.next == Nothing then
+                let
+                    cells =
+                        GameGrid.cellsToEliminate model.gameGrid
+                in
+                if not <| List.isEmpty cells then
                     noUpdate
 
-                GameOver since ->
-                    if since + 5000 <= ms then
-                        doUpdate (setPhase TitleScreen)
+                else if GameGrid.spawningBlocked model.gameGrid then
+                    doUpdate (setPhase (GameOver ms))
 
-                    else
-                        noUpdate
+                else
+                    doUpdate (updateGameGrid (GameGrid.spawnNewBlocks ms) >> setPhase (Playing ms Controlling))
 
-                _ ->
-                    noUpdate
+            else if since + model.gameData.speed <= ms then
+                doUpdate (updateGameGrid (GameGrid.falling ms) >> setPhase (Playing ms Controlling))
+
+            else
+                noUpdate
+
+        ( Tick posix, Playing since (Eliminating cells) ) ->
+            noUpdate
+
+        ( Tick posix, GameOver since ) ->
+            if since + 5000 <= Time.posixToMillis posix then
+                doUpdate (setPhase TitleScreen)
+
+            else
+                noUpdate
+
+        _ ->
+            noUpdate
 
 
 handleAction : PlayerAction -> Model -> Model
