@@ -53,7 +53,7 @@ type PlayerAction
 initModel : () -> ( Model, Cmd Msg )
 initModel =
     always <|
-        ( { gameGrid = GameGrid.defaultGameGrid
+        ( { gameGrid = GameGrid.init
           , gamePhase = TitleScreen
           , gameData = defaultGameData
           }
@@ -78,7 +78,7 @@ update msg model =
             ( fn model, Cmd.none )
 
         startGame =
-            setGameGrid GameGrid.defaultGameGrid >> setPhase (Playing 0 Controlling)
+            setGameGrid GameGrid.init >> setPhase (Playing 0 Controlling)
     in
     case ( msg, model.gamePhase ) of
         ( StartGame, _ ) ->
@@ -98,7 +98,7 @@ update msg model =
                 ms =
                     Time.posixToMillis posix
             in
-            if model.gameGrid.next == Nothing then
+            if GameGrid.hasNoNext model.gameGrid then
                 let
                     cells =
                         GameGrid.cellsToEliminate model.gameGrid
