@@ -23,7 +23,6 @@ module GameGrid exposing
     )
 
 import Array exposing (Array)
-import Dict
 import Html exposing (Html, div)
 import Html.Attributes exposing (class)
 
@@ -99,14 +98,6 @@ init =
         |> Array.repeat height
         |> Array.repeat width
         |> Model width height Nothing
-
-
-getCell : Model -> Int -> Int -> Cell
-getCell { columns } x y =
-    columns
-        |> Array.get x
-        |> Maybe.andThen (Array.get y)
-        |> Maybe.withDefault Empty
 
 
 view : Model -> Html msg
@@ -199,8 +190,8 @@ spawnNewBlocks millis model =
         |> (spawnBlockSet millis |> toNextBlock |> setNextBlock)
 
 
-falling : Int -> Model -> Model
-falling ms model =
+falling : Model -> Model
+falling model =
     case model.next of
         Nothing ->
             model
@@ -367,14 +358,17 @@ landNextBlock next model =
 -- status functions
 
 
+getCell : Model -> Int -> Int -> Cell
+getCell { columns } x y =
+    columns
+        |> Array.get x
+        |> Maybe.andThen (Array.get y)
+        |> Maybe.withDefault Empty
+
+
 cellIsEmpty : Cell -> Bool
 cellIsEmpty cell =
     cell == Empty
-
-
-cellIsNotEmpty : Cell -> Bool
-cellIsNotEmpty cell =
-    cell /= Empty
 
 
 hasNext : Model -> Bool
@@ -400,19 +394,40 @@ spawningBlocked model =
 cellsToEliminate : Model -> List EliminatedCell
 cellsToEliminate gameGrid =
     let
-        gridCells : Dict.Dict ( Int, Int ) Cell
-        gridCells =
-            gameGrid.columns
-                |> Array.toIndexedList
-                |> List.concatMap
-                    (\( x, col ) ->
-                        col
-                            |> Array.toIndexedList
-                            |> List.map
-                                (\( y, cell ) ->
-                                    ( ( x, y ), cell )
-                                )
-                    )
-                |> Dict.fromList
+        cellNotEmpty ( _, cell ) =
+            cell /= Empty
+
+        cellsMatch : Cell -> Cell -> Cell -> Bool
+        cellsMatch a b c =
+            a == b && a == c
+
+        cellIsInALine : ( ( Int, Int ), Cell ) -> Bool
+        cellIsInALine ( ( x, y ), cell ) =
+            let
+                gc : Int -> Int -> Cell
+                gc dx dy =
+                    getCell gameGrid (x + dx) (y + dy)
+            in
+            cellsMatch (gc -1 0) cell (gc 1 0)
+                || cellsMatch (gc 0 -1) cell (gc 0 1)
+                || cellsMatch (gc -1 -1) cell (gc 1 1)
+                || cellsMatch (gc 1 -1) cell (gc -1 1)
+
+        toEliminatedCell : ( ( Int, Int ), Cell ) -> EliminatedCell
+        toEliminatedCell ( ( x, y ), _ ) =
+            EliminatedCell x y Queued
     in
-    []
+    gameGrid.columns
+        |> Array.toIndexedList
+        |> List.concatMap
+            (\( x, col ) ->
+                col
+                    |> Array.toIndexedList
+                    |> List.filter cellNotEmpty
+                    |> List.map
+                        (\( y, cell ) ->
+                            ( ( x, y ), cell )
+                        )
+            )
+        |> List.filter cellIsInALine
+        |> List.map toEliminatedCell
