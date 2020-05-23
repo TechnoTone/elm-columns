@@ -75,6 +75,23 @@ div {
   &.cell_blue {
     background: blue;
   }
+
+  &.cell_dead {
+    animation: celldeath 500ms;
+    opacity: 0;
+  }
+
+  @keyframes celldeath {
+    0% {
+      opacity: 1;
+
+    }
+    100% {
+      opacity: 0;
+      width: 5px;
+      height: 5px;
+    }
+  }
 }
 
 

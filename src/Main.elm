@@ -5,8 +5,9 @@ import Browser.Events as Browser
 import GameGrid
 import Html exposing (Attribute, Html, button, div, h1, h3, text)
 import Html.Attributes exposing (class, classList)
-import Html.Events exposing (onClick)
+import Html.Events exposing (on, onClick)
 import Json.Decode as Decode
+import List.Extra as List
 import Time
 
 
@@ -31,7 +32,7 @@ type Phase
 
 type PlayingPhase
     = Controlling
-    | Eliminating (List GameGrid.EliminatedCell)
+    | Eliminating (List GameGrid.DeadCell)
     | Collapsing
 
 
@@ -39,6 +40,7 @@ type Msg
     = Tick Time.Posix
     | StartGame
     | PlayerAction PlayerAction
+    | DeadCellAnimationEnd GameGrid.Coordinate
 
 
 type PlayerAction
@@ -100,11 +102,24 @@ update msg model =
             in
             if GameGrid.hasNoNext model.gameGrid then
                 let
-                    cells =
-                        GameGrid.cellsToEliminate model.gameGrid
+                    deadCells : List GameGrid.CoordinateTriple
+                    deadCells =
+                        GameGrid.checkForDeadCells model.gameGrid
+
+                    coordinateList : List GameGrid.Coordinate
+                    coordinateList =
+                        deadCells |> List.concatMap (\( a, b, c ) -> [ a, b, c ])
+
+                    totalScore =
+                        List.length coordinateList
+
+                    groupedCoordinates : List GameGrid.DeadCell
+                    groupedCoordinates =
+                        List.group coordinateList
+                            |> List.map (\( c, l ) -> GameGrid.DeadCell c (List.length l))
                 in
-                if not <| List.isEmpty cells then
-                    noUpdate
+                if not <| List.isEmpty groupedCoordinates then
+                    doUpdate (updateScore totalScore >> setPhase (Playing ms (Eliminating groupedCoordinates)))
 
                 else if GameGrid.spawningBlocked model.gameGrid then
                     doUpdate (setPhase (GameOver ms))
@@ -113,13 +128,31 @@ update msg model =
                     doUpdate (updateGameGrid (GameGrid.spawnNewBlocks ms) >> setPhase (Playing ms Controlling))
 
             else if since + model.gameData.speed <= ms then
-                doUpdate (updateGameGrid (GameGrid.falling ms) >> setPhase (Playing ms Controlling))
+                doUpdate (updateGameGrid GameGrid.falling >> setPhase (Playing ms Controlling))
 
             else
                 noUpdate
 
-        ( Tick posix, Playing since (Eliminating cells) ) ->
-            noUpdate
+        ( Tick posix, Playing since (Eliminating (cell :: rest)) ) ->
+            let
+                ms =
+                    Time.posixToMillis posix
+            in
+            if since + 20 <= ms then
+                doUpdate
+                    (updateGameGrid (GameGrid.eliminateCell cell)
+                        >> setPhase (Playing ms (Eliminating rest))
+                    )
+
+            else
+                noUpdate
+
+        ( Tick posix, Playing since (Eliminating []) ) ->
+            if GameGrid.hasDeadCells model.gameGrid then
+                noUpdate
+
+            else
+                doUpdate (setPhase (Playing (Time.posixToMillis posix) Controlling))
 
         ( Tick posix, GameOver since ) ->
             if since + 5000 <= Time.posixToMillis posix then
@@ -127,6 +160,9 @@ update msg model =
 
             else
                 noUpdate
+
+        ( DeadCellAnimationEnd coordinate, _ ) ->
+            doUpdate (updateGameGrid (GameGrid.removeDeadCell coordinate))
 
         _ ->
             noUpdate
@@ -174,6 +210,20 @@ setGameData gameData model =
     { model | gameData = gameData }
 
 
+setScore : Int -> GameData -> GameData
+setScore score gameData =
+    { gameData | score = score }
+
+
+updateScore : Int -> Model -> Model
+updateScore score model =
+    model
+        |> (model.gameData
+                |> setScore (model.gameData.score + score)
+                |> setGameData
+           )
+
+
 view : Model -> Browser.Document Msg
 view model =
     let
@@ -202,7 +252,7 @@ view model =
                 GameOver _ ->
                     div []
                         [ gameInfo model.gameData
-                        , GameGrid.view model.gameGrid
+                        , GameGrid.view model.gameGrid DeadCellAnimationEnd
                         , div
                             [ class "GameOverPanel" ]
                             [ div [] [ text "GAME OVER" ] ]
@@ -211,7 +261,7 @@ view model =
                 _ ->
                     div []
                         [ gameInfo model.gameData
-                        , GameGrid.view model.gameGrid
+                        , GameGrid.view model.gameGrid DeadCellAnimationEnd
                         ]
     in
     { title = "Columns"

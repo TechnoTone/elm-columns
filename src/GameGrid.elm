@@ -2,19 +2,23 @@ module GameGrid exposing
     ( Block(..)
     , Cell(..)
     , Column
-    , EliminatedCell
-    , EliminationState(..)
+    , Coordinate
+    , CoordinateTriple
+    , DeadCell
     , Model
     , NextBlock
     , allBlocks
-    , cellsToEliminate
+    , checkForDeadCells
     , dropToBottom
+    , eliminateCell
     , falling
+    , hasDeadCells
     , hasNext
     , hasNoNext
     , init
     , moveLeft
     , moveRight
+    , removeDeadCell
     , rotateDown
     , rotateUp
     , spawnNewBlocks
@@ -25,6 +29,8 @@ module GameGrid exposing
 import Array exposing (Array)
 import Html exposing (Html, div)
 import Html.Attributes exposing (class)
+import Html.Events exposing (on)
+import Json.Decode as Decode
 
 
 type alias Model =
@@ -35,25 +41,27 @@ type alias Model =
     }
 
 
+type alias NextBlock =
+    { blockSet : BlockTriple
+    , coordinate : Coordinate
+    }
+
+
+type alias BlockTriple =
+    { b1 : Block
+    , b2 : Block
+    , b3 : Block
+    }
+
+
 type alias Column =
     Array Cell
 
 
 type Cell
     = Empty
-    | Occupied Block
-
-
-type alias EliminatedCell =
-    { col : Int
-    , row : Int
-    , state : EliminationState
-    }
-
-
-type EliminationState
-    = Queued
-    | Eliminated Int
+    | AliveBlock Block
+    | DeadBlock Int Block
 
 
 type Block
@@ -62,18 +70,20 @@ type Block
     | Blue
 
 
-type alias NextBlock =
-    { blockSet : BlockSet
-    , col : Int
+type alias DeadCell =
+    { coordinate : Coordinate
+    , multiplier : Int
+    }
+
+
+type alias Coordinate =
+    { col : Int
     , row : Int
     }
 
 
-type alias BlockSet =
-    { b1 : Block
-    , b2 : Block
-    , b3 : Block
-    }
+type alias CoordinateTriple =
+    ( Coordinate, Coordinate, Coordinate )
 
 
 allBlocks : Array Block
@@ -93,55 +103,86 @@ init =
 
         height =
             20
+
+        next =
+            Just <| NextBlock (BlockTriple Red Red Red) (Coordinate 3 19)
     in
     Empty
         |> Array.repeat height
         |> Array.repeat width
-        |> Model width height Nothing
+        |> Model width height next
 
 
-view : Model -> Html msg
-view ({ width, height, next } as gameGrid) =
+view : Model -> (Coordinate -> msg) -> Html msg
+view ({ width, height, next } as gameGrid) deadCellAnimationEndMsg =
     let
-        drawCell cell =
+        drawCell coordinate cell =
             div
-                [ class "GameArea_cell"
-                , class <| cellClass cell
-                ]
+                (List.append
+                    [ class "GameArea_cell"
+                    , class <| cellClass cell
+                    ]
+                    (deadCellAnimationHook cell coordinate)
+                )
                 []
 
-        getCell_ x y =
-            case next of
-                Nothing ->
-                    getCell gameGrid x y
+        captureAnimEnd : Coordinate -> List (Html.Attribute msg)
+        captureAnimEnd coordinate =
+            [ "webkitAnimationEnd", "oanimationend", "msAnimationEnd", "animationend" ]
+                |> List.map
+                    (\event ->
+                        on event (Decode.succeed (deadCellAnimationEndMsg coordinate))
+                    )
 
-                Just { blockSet, col, row } ->
-                    if x == col && y >= row - 2 && y <= row then
-                        if y + 2 == row then
-                            Occupied blockSet.b1
+        deadCellAnimationHook : Cell -> Coordinate -> List (Html.Attribute msg)
+        deadCellAnimationHook cell coordinate =
+            case cell of
+                DeadBlock _ _ ->
+                    captureAnimEnd coordinate
 
-                        else if y + 1 == row then
-                            Occupied blockSet.b2
-
-                        else
-                            Occupied blockSet.b3
-
-                    else
-                        getCell gameGrid x y
+                _ ->
+                    []
 
         cellClass cell =
             case cell of
                 Empty ->
                     "cell_empty"
 
-                Occupied Red ->
-                    "cell_red"
+                AliveBlock block ->
+                    "cell_" ++ blockClass block
 
-                Occupied Green ->
-                    "cell_green"
+                DeadBlock multiplier block ->
+                    "cell_dead cell_" ++ blockClass block
 
-                Occupied Blue ->
-                    "cell_blue"
+        blockClass block =
+            case block of
+                Red ->
+                    "red"
+
+                Green ->
+                    "green"
+
+                Blue ->
+                    "blue"
+
+        getCell_ x y =
+            case next of
+                Nothing ->
+                    getCell gameGrid (Coordinate x y)
+
+                Just { blockSet, coordinate } ->
+                    if x == coordinate.col && y >= coordinate.row - 2 && y <= coordinate.row then
+                        if y + 2 == coordinate.row then
+                            AliveBlock blockSet.b1
+
+                        else if y + 1 == coordinate.row then
+                            AliveBlock blockSet.b2
+
+                        else
+                            AliveBlock blockSet.b3
+
+                    else
+                        getCell gameGrid (Coordinate x y)
     in
     div
         [ class "GameArea" ]
@@ -150,8 +191,7 @@ view ({ width, height, next } as gameGrid) =
                 (\y ->
                     div [ class "GameArea_row" ]
                         (List.range 0 (width - 1)
-                            |> List.map (\x -> getCell_ x y)
-                            |> List.map drawCell
+                            |> List.map (\x -> drawCell (Coordinate x y) (getCell_ x y))
                         )
                 )
         )
@@ -164,9 +204,9 @@ view ({ width, height, next } as gameGrid) =
 spawnNewBlocks : Int -> Model -> Model
 spawnNewBlocks millis model =
     let
-        spawnBlockSet : Int -> BlockSet
+        spawnBlockSet : Int -> BlockTriple
         spawnBlockSet i =
-            BlockSet
+            BlockTriple
                 (spawnBlock i)
                 (spawnBlock (i // 10))
                 (spawnBlock (i // 100))
@@ -178,13 +218,13 @@ spawnNewBlocks millis model =
                 allBlocks
                 |> Maybe.withDefault Red
 
-        toNextBlock : BlockSet -> NextBlock
+        toNextBlock : BlockTriple -> NextBlock
         toNextBlock blockSet =
             let
                 col =
                     model.width // 2
             in
-            NextBlock blockSet col 0
+            NextBlock blockSet (Coordinate col 0)
     in
     model
         |> (spawnBlockSet millis |> toNextBlock |> setNextBlock)
@@ -198,32 +238,22 @@ falling model =
 
         Just next ->
             let
-                col =
-                    next.col
-
-                row =
-                    next.row
+                { col, row } =
+                    next.coordinate
 
                 cellBelow =
                     if row == model.height - 1 then
-                        Occupied Red
+                        AliveBlock Red
 
                     else
                         model.columns |> Array.get col |> Maybe.andThen (Array.get (row + 1)) |> Maybe.withDefault Empty
             in
             case cellBelow of
                 Empty ->
-                    fallOneRow model
+                    updateNextBlock (updateCoordinate (updateCoordinateRow ((+) 1))) model
 
                 _ ->
-                    model |> landNextBlock next
-
-
-fallOneRow : Model -> Model
-fallOneRow model =
-    updateNextBlock
-        (\nb -> { nb | row = nb.row + 1 })
-        model
+                    landNextBlock next model
 
 
 setNextBlock : NextBlock -> Model -> Model
@@ -241,9 +271,60 @@ updateNextBlock fn model =
             setNextBlock (fn next) model
 
 
+updateCoordinate : (Coordinate -> Coordinate) -> NextBlock -> NextBlock
+updateCoordinate fn next =
+    { next | coordinate = fn next.coordinate }
+
+
+updateCoordinateRow : (Int -> Int) -> Coordinate -> Coordinate
+updateCoordinateRow fn coordinate =
+    { coordinate | row = fn coordinate.row }
+
+
+updateCoordinateCol : (Int -> Int) -> Coordinate -> Coordinate
+updateCoordinateCol fn coordinate =
+    { coordinate | col = fn coordinate.col }
+
+
 clearNextBlock : Model -> Model
 clearNextBlock model =
     { model | next = Nothing }
+
+
+eliminateCell : DeadCell -> Model -> Model
+eliminateCell { coordinate, multiplier } model =
+    model |> updateCell coordinate (toEliminatedBlock (getCell model coordinate) multiplier)
+
+
+removeDeadCell : Coordinate -> Model -> Model
+removeDeadCell coordinate model =
+    model |> updateCell coordinate Empty
+
+
+toEliminatedBlock : Cell -> Int -> Cell
+toEliminatedBlock aliveCell multiplier =
+    case aliveCell of
+        Empty ->
+            Empty
+
+        AliveBlock block ->
+            DeadBlock multiplier block
+
+        DeadBlock _ _ ->
+            aliveCell
+
+
+updateCell : Coordinate -> Cell -> Model -> Model
+updateCell { col, row } cell model =
+    model
+        |> (Array.set col
+                (Array.get col model.columns
+                    |> Maybe.withDefault Array.empty
+                    |> Array.set row cell
+                )
+                model.columns
+                |> setColumns
+           )
 
 
 setColumns : Array Column -> Model -> Model
@@ -267,18 +348,20 @@ dropToBottom model =
                 |> List.reverse
                 |> List.head
                 |> Maybe.withDefault 0
+
+        newCoordinate : Coordinate -> Coordinate
+        newCoordinate coordinate =
+            { coordinate | row = bottomEmptyCell coordinate.col }
     in
-    updateNextBlock
-        (\nb -> { nb | row = bottomEmptyCell nb.col })
-        model
+    updateNextBlock (\nb -> { nb | coordinate = newCoordinate nb.coordinate }) model
 
 
 rotateUp : Model -> Model
 rotateUp model =
     let
-        update : BlockSet -> BlockSet
+        update : BlockTriple -> BlockTriple
         update blockSet =
-            BlockSet blockSet.b2 blockSet.b3 blockSet.b1
+            BlockTriple blockSet.b2 blockSet.b3 blockSet.b1
     in
     updateNextBlock
         (\nb -> { nb | blockSet = update nb.blockSet })
@@ -288,9 +371,9 @@ rotateUp model =
 rotateDown : Model -> Model
 rotateDown model =
     let
-        update : BlockSet -> BlockSet
+        update : BlockTriple -> BlockTriple
         update blockSet =
-            BlockSet blockSet.b3 blockSet.b1 blockSet.b2
+            BlockTriple blockSet.b3 blockSet.b1 blockSet.b2
     in
     updateNextBlock
         (\nb -> { nb | blockSet = update nb.blockSet })
@@ -301,12 +384,16 @@ moveNextBlock : Model -> Int -> NextBlock -> NextBlock
 moveNextBlock model col nb =
     case model.next of
         Just next ->
+            let
+                newCoordinate =
+                    Coordinate col next.coordinate.row
+            in
             if
                 (col >= 0)
                     && (col <= (model.width - 1))
-                    && cellIsEmpty (getCell model col next.row)
+                    && cellIsEmpty (getCell model newCoordinate)
             then
-                { nb | col = col }
+                { nb | coordinate = newCoordinate }
 
             else
                 nb
@@ -318,25 +405,22 @@ moveNextBlock model col nb =
 moveLeft : Model -> Model
 moveLeft model =
     updateNextBlock
-        (\nb -> moveNextBlock model (nb.col - 1) nb)
+        (\nb -> moveNextBlock model (nb.coordinate.col - 1) nb)
         model
 
 
 moveRight : Model -> Model
 moveRight model =
     updateNextBlock
-        (\nb -> moveNextBlock model (nb.col + 1) nb)
+        (\nb -> moveNextBlock model (nb.coordinate.col + 1) nb)
         model
 
 
 landNextBlock : NextBlock -> Model -> Model
 landNextBlock next model =
     let
-        col =
-            next.col
-
-        row =
-            next.row
+        { col, row } =
+            next.coordinate
 
         { b1, b2, b3 } =
             next.blockSet
@@ -345,9 +429,9 @@ landNextBlock next model =
             model.columns
                 |> Array.get col
                 |> Maybe.withDefault Array.empty
-                |> Array.set (row - 2) (Occupied b1)
-                |> Array.set (row - 1) (Occupied b2)
-                |> Array.set (row - 0) (Occupied b3)
+                |> Array.set (row - 2) (AliveBlock b1)
+                |> Array.set (row - 1) (AliveBlock b2)
+                |> Array.set (row - 0) (AliveBlock b3)
     in
     model
         |> clearNextBlock
@@ -358,17 +442,37 @@ landNextBlock next model =
 -- status functions
 
 
-getCell : Model -> Int -> Int -> Cell
-getCell { columns } x y =
+getCell : Model -> Coordinate -> Cell
+getCell { columns } { col, row } =
     columns
-        |> Array.get x
-        |> Maybe.andThen (Array.get y)
+        |> Array.get col
+        |> Maybe.andThen (Array.get row)
         |> Maybe.withDefault Empty
 
 
 cellIsEmpty : Cell -> Bool
 cellIsEmpty cell =
     cell == Empty
+
+
+cellIsAlive : Cell -> Bool
+cellIsAlive cell =
+    case cell of
+        AliveBlock _ ->
+            True
+
+        _ ->
+            False
+
+
+cellIsDead : Cell -> Bool
+cellIsDead cell =
+    case cell of
+        DeadBlock _ _ ->
+            True
+
+        _ ->
+            False
 
 
 hasNext : Model -> Bool
@@ -391,8 +495,8 @@ spawningBlocked model =
         /= Empty
 
 
-cellsToEliminate : Model -> List EliminatedCell
-cellsToEliminate gameGrid =
+checkForDeadCells : Model -> List CoordinateTriple
+checkForDeadCells model =
     let
         cellNotEmpty ( _, cell ) =
             cell /= Empty
@@ -401,23 +505,33 @@ cellsToEliminate gameGrid =
         cellsMatch a b c =
             a == b && a == c
 
-        cellIsInALine : ( ( Int, Int ), Cell ) -> Bool
-        cellIsInALine ( ( x, y ), cell ) =
+        getCellGroups : ( ( Int, Int ), Cell ) -> Maybe CoordinateTriple
+        getCellGroups ( ( x, y ), cell ) =
             let
                 gc : Int -> Int -> Cell
                 gc dx dy =
-                    getCell gameGrid (x + dx) (y + dy)
-            in
-            cellsMatch (gc -1 0) cell (gc 1 0)
-                || cellsMatch (gc 0 -1) cell (gc 0 1)
-                || cellsMatch (gc -1 -1) cell (gc 1 1)
-                || cellsMatch (gc 1 -1) cell (gc -1 1)
+                    getCell model (Coordinate (x + dx) (y + dy))
 
-        toEliminatedCell : ( ( Int, Int ), Cell ) -> EliminatedCell
-        toEliminatedCell ( ( x, y ), _ ) =
-            EliminatedCell x y Queued
+                ec : Int -> Int -> Coordinate
+                ec dx dy =
+                    Coordinate (x + dx) (y + dy)
+            in
+            if cellsMatch (gc -1 0) cell (gc 1 0) then
+                Just <| ( ec -1 0, ec 0 0, ec 1 0 )
+
+            else if cellsMatch (gc 0 -1) cell (gc 0 1) then
+                Just ( ec 0 -1, ec 0 0, ec 0 1 )
+
+            else if cellsMatch (gc -1 -1) cell (gc 1 1) then
+                Just ( ec -1 -1, ec 0 0, ec 1 1 )
+
+            else if cellsMatch (gc 1 -1) cell (gc -1 1) then
+                Just ( ec 1 -1, ec 0 0, ec -1 1 )
+
+            else
+                Nothing
     in
-    gameGrid.columns
+    model.columns
         |> Array.toIndexedList
         |> List.concatMap
             (\( x, col ) ->
@@ -429,5 +543,12 @@ cellsToEliminate gameGrid =
                             ( ( x, y ), cell )
                         )
             )
-        |> List.filter cellIsInALine
-        |> List.map toEliminatedCell
+        |> List.filterMap getCellGroups
+
+
+hasDeadCells : Model -> Bool
+hasDeadCells model =
+    model.columns
+        |> Array.toList
+        |> List.concatMap Array.toList
+        |> List.any cellIsDead
