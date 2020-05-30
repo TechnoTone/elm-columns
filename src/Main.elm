@@ -67,11 +67,16 @@ initModel =
 
 defaultGameData : GameData
 defaultGameData =
-    { speed = 200
+    { speed = startSpeed
     , score = 0
     , blockCount = 0
     , eliminationCount = 0
     }
+
+
+startSpeed : Int
+startSpeed =
+    300
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -254,7 +259,7 @@ incrementEliminationCount gameData =
 
 adjustGameSpeed : GameData -> GameData
 adjustGameSpeed gameData =
-    { gameData | speed = 200 - gameData.blockCount }
+    { gameData | speed = startSpeed - gameData.blockCount }
 
 
 view : Model -> Browser.Document Msg
