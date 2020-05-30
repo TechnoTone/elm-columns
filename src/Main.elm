@@ -21,6 +21,8 @@ type alias Model =
 type alias GameData =
     { speed : Int
     , score : Int
+    , blockCount : Int
+    , eliminationCount : Int
     }
 
 
@@ -67,6 +69,8 @@ defaultGameData : GameData
 defaultGameData =
     { speed = 200
     , score = 0
+    , blockCount = 0
+    , eliminationCount = 0
     }
 
 
@@ -119,13 +123,13 @@ update msg model =
                             |> List.map (\( c, l ) -> GameGrid.DeadCell c (List.length l))
                 in
                 if not <| List.isEmpty groupedCoordinates then
-                    doUpdate (updateScore totalScore >> setPhase (Playing ms (CellsDying groupedCoordinates)))
+                    doUpdate (updateGameData (incrementScore totalScore >> incrementEliminationCount) >> setPhase (Playing ms (CellsDying groupedCoordinates)))
 
                 else if GameGrid.spawningBlocked model.gameGrid then
                     doUpdate (setPhase (GameOver ms))
 
                 else
-                    doUpdate (updateGameGrid (GameGrid.spawnNewBlocks ms) >> setPhase (Playing ms Controlling))
+                    doUpdate (updateGameGrid (GameGrid.spawnNewBlocks ms) >> updateGameData (incrementBlockCount >> adjustGameSpeed) >> setPhase (Playing ms Controlling))
 
             else if since + model.gameData.speed <= ms then
                 doUpdate (updateGameGrid GameGrid.falling >> setPhase (Playing ms Controlling))
@@ -228,18 +232,29 @@ setGameData gameData model =
     { model | gameData = gameData }
 
 
-setScore : Int -> GameData -> GameData
-setScore score gameData =
-    { gameData | score = score }
+updateGameData : (GameData -> GameData) -> Model -> Model
+updateGameData fn model =
+    setGameData (fn model.gameData) model
 
 
-updateScore : Int -> Model -> Model
-updateScore score model =
-    model
-        |> (model.gameData
-                |> setScore (model.gameData.score + score)
-                |> setGameData
-           )
+incrementScore : Int -> GameData -> GameData
+incrementScore increment gameData =
+    { gameData | score = gameData.score + increment }
+
+
+incrementBlockCount : GameData -> GameData
+incrementBlockCount gameData =
+    { gameData | blockCount = gameData.blockCount + 1 }
+
+
+incrementEliminationCount : GameData -> GameData
+incrementEliminationCount gameData =
+    { gameData | eliminationCount = gameData.eliminationCount + 1 }
+
+
+adjustGameSpeed : GameData -> GameData
+adjustGameSpeed gameData =
+    { gameData | speed = 200 - gameData.blockCount }
 
 
 view : Model -> Browser.Document Msg
