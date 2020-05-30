@@ -32,7 +32,7 @@ type Phase
 
 type PlayingPhase
     = Controlling
-    | Eliminating (List GameGrid.DeadCell)
+    | CellsDying (List GameGrid.DeadCell)
     | Collapsing
 
 
@@ -80,7 +80,7 @@ update msg model =
             ( fn model, Cmd.none )
 
         startGame =
-            setGameGrid GameGrid.init >> setPhase (Playing 0 Controlling)
+            setGameGrid GameGrid.init >> setGameData defaultGameData >> setPhase (Playing 0 Controlling)
     in
     case ( msg, model.gamePhase ) of
         ( StartGame, _ ) ->
@@ -119,7 +119,7 @@ update msg model =
                             |> List.map (\( c, l ) -> GameGrid.DeadCell c (List.length l))
                 in
                 if not <| List.isEmpty groupedCoordinates then
-                    doUpdate (updateScore totalScore >> setPhase (Playing ms (Eliminating groupedCoordinates)))
+                    doUpdate (updateScore totalScore >> setPhase (Playing ms (CellsDying groupedCoordinates)))
 
                 else if GameGrid.spawningBlocked model.gameGrid then
                     doUpdate (setPhase (GameOver ms))
@@ -133,7 +133,7 @@ update msg model =
             else
                 noUpdate
 
-        ( Tick posix, Playing since (Eliminating (cell :: rest)) ) ->
+        ( Tick posix, Playing since (CellsDying (cell :: rest)) ) ->
             let
                 ms =
                     Time.posixToMillis posix
@@ -141,18 +141,36 @@ update msg model =
             if since + 20 <= ms then
                 doUpdate
                     (updateGameGrid (GameGrid.eliminateCell cell)
-                        >> setPhase (Playing ms (Eliminating rest))
+                        >> setPhase (Playing ms (CellsDying rest))
                     )
 
             else
                 noUpdate
 
-        ( Tick posix, Playing since (Eliminating []) ) ->
+        ( Tick posix, Playing since (CellsDying []) ) ->
             if GameGrid.hasDeadCells model.gameGrid then
                 noUpdate
 
             else
-                doUpdate (setPhase (Playing (Time.posixToMillis posix) Controlling))
+                doUpdate (setPhase (Playing (Time.posixToMillis posix) Collapsing))
+
+        ( Tick posix, Playing since Collapsing ) ->
+            let
+                ms =
+                    Time.posixToMillis posix
+            in
+            if GameGrid.isCollapsible model.gameGrid then
+                if since + 20 <= ms then
+                    doUpdate
+                        (updateGameGrid GameGrid.collapse
+                            >> setPhase (Playing ms Collapsing)
+                        )
+
+                else
+                    noUpdate
+
+            else
+                doUpdate (setPhase (Playing 0 Controlling))
 
         ( Tick posix, GameOver since ) ->
             if since + 5000 <= Time.posixToMillis posix then

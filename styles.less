@@ -57,26 +57,49 @@ div {
   height: @cell-size;
   border: 0;
 
-  &:not(.cell_empty) {
+
+  div {
+    width: @cell-size;
+    height: @cell-size;
+    border: 0;
+  }
+
+  :not(.cell_empty) {
     box-shadow:
       inset  2px  2px 3px 0 rgba(255, 255, 255, 0.6),
       inset -2px -2px 3px 0 rgba(0, 0, 0, 0.3),
       3px 3px 3px rgba(0, 0, 0, 0.5);
   }
 
-  &.cell_red {
+  .cell_red {
     background: red;
   }
 
-  &.cell_green {
+  .cell_green {
     background: green;
   }
 
-  &.cell_blue {
+  .cell_blue {
     background: blue;
   }
 
-  &.cell_dead {
+  .cell_cyan {
+    background: cyan;
+  }
+
+  .cell_yellow {
+    background: yellow;
+  }
+
+  .cell_magenta {
+    background: magenta;
+  }
+
+  .cell_orange {
+    background: orange;
+  }
+
+  .cell_dead {
     animation: celldeath 500ms;
     opacity: 0;
   }

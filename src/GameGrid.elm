@@ -9,6 +9,7 @@ module GameGrid exposing
     , NextBlock
     , allBlocks
     , checkForDeadCells
+    , collapse
     , dropToBottom
     , eliminateCell
     , falling
@@ -16,6 +17,7 @@ module GameGrid exposing
     , hasNext
     , hasNoNext
     , init
+    , isCollapsible
     , moveLeft
     , moveRight
     , removeDeadCell
@@ -68,6 +70,10 @@ type Block
     = Red
     | Green
     | Blue
+    | Cyan
+    | Yellow
+    | Magenta
+    | Orange
 
 
 type alias DeadCell =
@@ -92,6 +98,10 @@ allBlocks =
         [ Red
         , Green
         , Blue
+        , Cyan
+        , Yellow
+        , Magenta
+        , Orange
         ]
 
 
@@ -105,7 +115,7 @@ init =
             20
 
         next =
-            Just <| NextBlock (BlockTriple Red Red Red) (Coordinate 3 19)
+            Nothing
     in
     Empty
         |> Array.repeat height
@@ -118,13 +128,14 @@ view ({ width, height, next } as gameGrid) deadCellAnimationEndMsg =
     let
         drawCell coordinate cell =
             div
-                (List.append
-                    [ class "GameArea_cell"
-                    , class <| cellClass cell
-                    ]
-                    (deadCellAnimationHook cell coordinate)
-                )
-                []
+                [ class "GameArea_cell" ]
+                [ div
+                    (List.append
+                        [ class <| cellClass cell ]
+                        (deadCellAnimationHook cell coordinate)
+                    )
+                    []
+                ]
 
         captureAnimEnd : Coordinate -> List (Html.Attribute msg)
         captureAnimEnd coordinate =
@@ -164,6 +175,18 @@ view ({ width, height, next } as gameGrid) deadCellAnimationEndMsg =
 
                 Blue ->
                     "blue"
+
+                Cyan ->
+                    "cyan"
+
+                Yellow ->
+                    "yellow"
+
+                Magenta ->
+                    "magenta"
+
+                Orange ->
+                    "orange"
 
         getCell_ x y =
             case next of
@@ -301,6 +324,30 @@ removeDeadCell coordinate model =
     model |> updateCell coordinate Empty
 
 
+collapse : Model -> Model
+collapse model =
+    let
+        collapseColumn : Column -> Column
+        collapseColumn column =
+            let
+                l =
+                    column |> Array.toList
+
+                n =
+                    column |> bottomEmptyCell
+            in
+            if n > 0 then
+                Empty
+                    :: List.take n l
+                    ++ List.drop (n + 1) l
+                    |> Array.fromList
+
+            else
+                column
+    in
+    model |> setColumns (model.columns |> Array.map collapseColumn)
+
+
 toEliminatedBlock : Cell -> Int -> Cell
 toEliminatedBlock aliveCell multiplier =
     case aliveCell of
@@ -335,23 +382,13 @@ setColumns columns model =
 dropToBottom : Model -> Model
 dropToBottom model =
     let
-        colCells : Model -> Int -> Array Cell
-        colCells { columns } col =
-            columns |> Array.get col |> Maybe.withDefault Array.empty
-
-        bottomEmptyCell : Int -> Int
-        bottomEmptyCell col =
-            colCells model col
-                |> Array.toIndexedList
-                |> List.filter (Tuple.second >> cellIsEmpty)
-                |> List.map Tuple.first
-                |> List.reverse
-                |> List.head
-                |> Maybe.withDefault 0
+        colCells : Int -> Array Cell
+        colCells col =
+            model.columns |> Array.get col |> Maybe.withDefault Array.empty
 
         newCoordinate : Coordinate -> Coordinate
         newCoordinate coordinate =
-            { coordinate | row = bottomEmptyCell coordinate.col }
+            { coordinate | row = bottomEmptyCell <| colCells coordinate.col }
     in
     updateNextBlock (\nb -> { nb | coordinate = newCoordinate nb.coordinate }) model
 
@@ -552,3 +589,32 @@ hasDeadCells model =
         |> Array.toList
         |> List.concatMap Array.toList
         |> List.any cellIsDead
+
+
+bottomEmptyCell : Array Cell -> Int
+bottomEmptyCell cells =
+    cells
+        |> Array.toIndexedList
+        |> List.filter (Tuple.second >> cellIsEmpty)
+        |> List.map Tuple.first
+        |> List.reverse
+        |> List.head
+        |> Maybe.withDefault 0
+
+
+isCollapsible : Model -> Bool
+isCollapsible model =
+    let
+        topAliveCell : Array Cell -> Int
+        topAliveCell cells =
+            cells
+                |> Array.toIndexedList
+                |> List.filter (Tuple.second >> cellIsAlive)
+                |> List.map Tuple.first
+                |> List.head
+                |> Maybe.withDefault 99
+    in
+    model.columns
+        |> Array.map (\cells -> bottomEmptyCell cells > topAliveCell cells)
+        |> Array.toList
+        |> List.foldr (||) False
