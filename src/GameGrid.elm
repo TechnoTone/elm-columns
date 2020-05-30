@@ -35,6 +35,16 @@ import Html.Events exposing (on)
 import Json.Decode as Decode
 
 
+
+{-
+   @@   @@  @@@@  @@@@@  @@@@@@ @@
+   @@@ @@@ @@  @@ @@  @@ @@     @@
+   @@ @ @@ @@  @@ @@  @@ @@@@   @@
+   @@   @@ @@  @@ @@  @@ @@     @@
+   @@   @@  @@@@  @@@@@  @@@@@@ @@@@@@
+-}
+
+
 type alias Model =
     { width : Int
     , height : Int
@@ -121,6 +131,16 @@ init =
         |> Array.repeat height
         |> Array.repeat width
         |> Model width height next
+
+
+
+{-
+   @@  @@ @@@@@@ @@@@@@ @@   @@
+   @@  @@   @@   @@     @@   @@
+   @@  @@   @@   @@@@   @@ @ @@
+    @@@@    @@   @@     @@@@@@@
+     @@   @@@@@@ @@@@@@  @@ @@
+-}
 
 
 view : Model -> (Coordinate -> msg) -> Html msg
@@ -221,7 +241,13 @@ view ({ width, height, next } as gameGrid) deadCellAnimationEndMsg =
 
 
 
--- Model update functions
+{-
+   @@  @@ @@@@@  @@@@@   @@@@  @@@@@@ @@@@@@
+   @@  @@ @@  @@ @@  @@ @@  @@   @@   @@
+   @@  @@ @@@@@  @@  @@ @@@@@@   @@   @@@@
+   @@  @@ @@     @@  @@ @@  @@   @@   @@
+    @@@@  @@     @@@@@  @@  @@   @@   @@@@@@
+-}
 
 
 spawnNewBlocks : Int -> Model -> Model
@@ -476,7 +502,13 @@ landNextBlock next model =
 
 
 
--- status functions
+{-
+    @@@@  @@@@@@ @@@@@@ @@@@@@ @@@@@@ @@@@@   @@@@
+   @@     @@       @@     @@   @@     @@  @@ @@
+   @@ @@@ @@@@     @@     @@   @@@@   @@@@@   @@@@
+   @@  @@ @@       @@     @@   @@     @@  @@     @@
+    @@@@  @@@@@@   @@     @@   @@@@@@ @@  @@  @@@@
+-}
 
 
 getCell : Model -> Coordinate -> Cell
