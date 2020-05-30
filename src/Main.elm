@@ -134,7 +134,7 @@ update msg model =
                     doUpdate (setPhase (GameOver ms))
 
                 else
-                    doUpdate (updateGameGrid (GameGrid.spawnNewBlocks ms) >> updateGameData (incrementBlockCount >> adjustGameSpeed) >> setPhase (Playing ms Controlling))
+                    doUpdate (updateGameGrid (GameGrid.spawnNewBlocks ms (getDifficulty model.gameData)) >> updateGameData (incrementBlockCount >> adjustGameSpeed) >> setPhase (Playing ms Controlling))
 
             else if since + model.gameData.speed <= ms then
                 doUpdate (updateGameGrid GameGrid.falling >> setPhase (Playing ms Controlling))
@@ -259,7 +259,17 @@ incrementEliminationCount gameData =
 
 adjustGameSpeed : GameData -> GameData
 adjustGameSpeed gameData =
-    { gameData | speed = startSpeed - gameData.blockCount }
+    { gameData | speed = getSpeed gameData }
+
+
+getSpeed : GameData -> Int
+getSpeed gameData =
+    startSpeed - gameData.blockCount // 2
+
+
+getDifficulty : GameData -> Int
+getDifficulty gameData =
+    gameData.eliminationCount // 20
 
 
 view : Model -> Browser.Document Msg

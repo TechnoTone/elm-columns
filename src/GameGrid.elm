@@ -250,8 +250,8 @@ view ({ width, height, next } as gameGrid) deadCellAnimationEndMsg =
 -}
 
 
-spawnNewBlocks : Int -> Model -> Model
-spawnNewBlocks millis model =
+spawnNewBlocks : Int -> Int -> Model -> Model
+spawnNewBlocks millis difficulty model =
     let
         spawnBlockSet : Int -> BlockTriple
         spawnBlockSet i =
@@ -263,7 +263,7 @@ spawnNewBlocks millis model =
         spawnBlock : Int -> Block
         spawnBlock i =
             Array.get
-                (i |> modBy (Array.length allBlocks))
+                (i |> modBy (min (difficulty + 3) (Array.length allBlocks)))
                 allBlocks
                 |> Maybe.withDefault Red
 
