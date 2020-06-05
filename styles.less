@@ -1,14 +1,49 @@
-@cell-size: 20px;
+@cell-size: 3vh;
 @page-bg-color: #e0e0e0;
 @game-bg-color: #4d4d4d;
+@game-over-bg-color: red;
 
 body {
   font-family: "Roboto";
-  display: flex;
-  flex-direction: column;
   background-color: @page-bg-color;
-  max-width: 680px;
   margin: 0 auto;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+
+  #main {
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0 auto;
+    padding: 0;
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+
+    &.GameOverScreen {
+      background: @game-over-bg-color;
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      animation: fadeToRed 500ms ease-out;
+
+      @keyframes fadeToRed {
+        0% {
+          background: @page-bg-color;
+        }
+        100% {
+          background: @game-over-bg-color;
+        }
+      }
+    }
+
+  }
 }
 
 
@@ -16,6 +51,15 @@ h1 {
   color: darkblue;
   text-shadow: 4px 4px 8px rgba(0, 0, 0, 0.3), -4px -4px 4px rgba(255, 255, 255, 0.5);
   text-align: center;
+  font-size: 6vh;
+  margin: 2vh;
+}
+
+h3 {
+  margin-top: 0;
+  margin-bottom: 2vh;
+  color: darkblue;
+  font-size: 3vh;
 }
 
 button {
@@ -25,6 +69,7 @@ button {
   outline: none;
   font-weight: bold;
   color: mediumblue;
+  font-size: 3vh;
 
   &:active {
     box-shadow: none;
@@ -57,7 +102,8 @@ div {
   width: @cell-size;
   height: @cell-size;
   border: 0;
-
+  display: flex;
+  align-content: center;
 
   div {
     width: @cell-size;
@@ -66,10 +112,9 @@ div {
   }
 
   :not(.cell_empty) {
-    box-shadow:
-      inset  2px  2px 3px 0 rgba(255, 255, 255, 0.6),
-      inset -2px -2px 3px 0 rgba(0, 0, 0, 0.3),
-      3px 3px 3px rgba(0, 0, 0, 0.5);
+    box-shadow: inset 2px 2px 3px 0 rgba(255, 255, 255, 0.6),
+                inset -2px -2px 3px 0 rgba(0, 0, 0, 0.3),
+                3px 3px 3px rgba(0, 0, 0, 0.5);
   }
 
   .cell_red {
@@ -93,7 +138,7 @@ div {
   }
 
   .cell_magenta {
-    background: magenta;
+    background: mediumpurple;
   }
 
   .cell_orange {
@@ -101,7 +146,7 @@ div {
   }
 
   .cell_dead {
-    animation: celldeath 500ms;
+    animation: celldeath 500ms ease-out;
     opacity: 0;
   }
 
@@ -112,31 +157,39 @@ div {
     }
     100% {
       opacity: 0;
-      width: 5px;
-      height: 5px;
+      width: 20%;
+      height: 20%;
     }
   }
 }
 
 
-.GameOverScreen {
-  background: red;
-  left: 0;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  position: absolute;
-  width: 100%;
-  height: 100%;
-}
-
 .GameOverPanel {
-  margin-top: -80%;
-  font-size: larger;
-  color: black;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  top: 40%;
+  font-size: 2em;
+  color: @game-over-bg-color;
   font-weight: bolder;
-  background-color: red;
+  background-color: darkred;
   opacity: 0.99;
-  outline: 3px solid black;
   padding: 5px;
+  text-shadow: 4px 4px 8px rgba(0, 0, 0, 1), -4px -4px 8px rgba(255, 255, 255, 0.5);
+  box-shadow: inset 12px 12px 24px 0 rgba(0, 0, 0, 0.5), inset -12px -12px 24px 0 rgba(0, 0, 0, 0.5);
+  animation: expandVertically 500ms ease-out;
+  font-size: 3vh;
+  overflow: hidden;
+  height: 3vh;
+
+  @keyframes expandVertically {
+    0% {
+      height: 0;
+      margin-top: 1.5vh;
+    }
+    100% {
+      height: 3vh;
+      margin-top: 0;
+    }
+  }
 }

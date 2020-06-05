@@ -4,8 +4,9 @@ import Browser
 import Browser.Events as Browser
 import GameGrid
 import Html exposing (Attribute, Html, button, div, h1, h3, text)
-import Html.Attributes exposing (class, classList)
-import Html.Events exposing (on, onClick)
+import Html.Attributes exposing (class, id)
+import Html.Events exposing (onClick)
+import Html.Events.Extra.Touch as Touch
 import Json.Decode as Decode
 import List.Extra as List
 import Time
@@ -42,7 +43,14 @@ type Msg
     = Tick Time.Posix
     | StartGame
     | PlayerAction PlayerAction
+    | Touch TouchEventType Touch.Event
     | DeadCellAnimationEnd GameGrid.Coordinate
+
+
+type TouchEventType
+    = TouchStart
+    | TouchMove
+    | TouchEnd
 
 
 type PlayerAction
@@ -103,6 +111,9 @@ update msg model =
 
         ( PlayerAction DropAction, GameOver _ ) ->
             doUpdate (setPhase TitleScreen)
+
+        ( Touch eventType eventData, _ ) ->
+            ( handleTouch eventType eventData model, Cmd.none )
 
         ( Tick posix, Playing since Controlling ) ->
             let
@@ -183,7 +194,8 @@ update msg model =
 
         ( Tick posix, GameOver since ) ->
             if since + 5000 <= Time.posixToMillis posix then
-                doUpdate (setPhase TitleScreen)
+                --doUpdate (setPhase TitleScreen)
+                noUpdate
 
             else
                 noUpdate
@@ -215,6 +227,15 @@ handleAction action model =
 
         _ ->
             model
+
+
+handleTouch : TouchEventType -> Touch.Event -> Model -> Model
+handleTouch eventType eventData model =
+    let
+        _ =
+            Debug.log "touch" ( eventType, eventData )
+    in
+    model
 
 
 setPhase : Phase -> Model -> Model
@@ -275,50 +296,44 @@ getDifficulty gameData =
 view : Model -> Browser.Document Msg
 view model =
     let
-        isGameOver =
-            case model.gamePhase of
-                GameOver _ ->
-                    True
+        heading =
+            h1 [] [ text "COLUMNS" ]
 
-                _ ->
-                    False
+        viewGame =
+            [ h3 [] [ text ("SCORE: " ++ String.fromInt model.gameData.score) ]
+            , GameGrid.view model.gameGrid DeadCellAnimationEnd
+            ]
 
-        gameInfo : GameData -> Html msg
-        gameInfo data =
-            div
-                [ class "GameInfo" ]
-                [ h3 [] [ text ("SCORE: " ++ String.fromInt data.score) ] ]
-
-        content : Html Msg
-        content =
+        ( classList, content ) =
             case model.gamePhase of
                 TitleScreen ->
-                    div []
-                        [ button [ onClick StartGame ] [ text "START GAME" ]
-                        ]
+                    ( [ class "TitleScreen" ]
+                    , [ button [ onClick StartGame ] [ text "START GAME" ] ]
+                    )
 
                 GameOver _ ->
-                    div []
-                        [ gameInfo model.gameData
-                        , GameGrid.view model.gameGrid DeadCellAnimationEnd
-                        , div
-                            [ class "GameOverPanel" ]
-                            [ div [] [ text "GAME OVER" ] ]
-                        ]
+                    ( [ class "GameOverScreen" ]
+                    , viewGame
+                        ++ [ div
+                                [ class "GameOverPanel" ]
+                                [ div [] [ text "GAME OVER" ] ]
+                           ]
+                    )
 
-                _ ->
-                    div []
-                        [ gameInfo model.gameData
-                        , GameGrid.view model.gameGrid DeadCellAnimationEnd
-                        ]
+                Playing _ _ ->
+                    ( [], viewGame )
     in
     { title = "Columns"
     , body =
         [ div
-            [ classList [ ( "GameOverScreen", isGameOver ) ] ]
-            [ h1 [] [ text "COLUMNS" ]
-            , content
-            ]
+            (classList
+                ++ [ Touch.onStart <| Touch TouchStart --TODO: Only want touch events when game in progress
+                   , Touch.onMove <| Touch TouchMove -- otherwise they block they block the start button
+                   , Touch.onEnd <| Touch TouchEnd -- but for now this is useful while developing touch handler
+                   , id "main"
+                   ]
+            )
+            (heading :: content)
         ]
     }
 
