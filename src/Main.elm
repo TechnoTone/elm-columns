@@ -12,6 +12,16 @@ import List.Extra as List
 import Time
 
 
+
+{-
+   @@   @@  @@@@  @@@@@  @@@@@@ @@
+   @@@ @@@ @@  @@ @@  @@ @@     @@
+   @@ @ @@ @@  @@ @@  @@ @@@@   @@
+   @@   @@ @@  @@ @@  @@ @@     @@
+   @@   @@  @@@@  @@@@@  @@@@@@ @@@@@@
+-}
+
+
 type alias Model =
     { gameGrid : GameGrid.Model
     , gamePhase : Phase
@@ -85,6 +95,71 @@ defaultGameData =
 startSpeed : Int
 startSpeed =
     300
+
+
+
+{-
+   @@  @@ @@@@@@ @@@@@@ @@   @@
+   @@  @@   @@   @@     @@   @@
+   @@  @@   @@   @@@@   @@ @ @@
+    @@@@    @@   @@     @@@@@@@
+     @@   @@@@@@ @@@@@@  @@ @@
+-}
+
+
+view : Model -> Browser.Document Msg
+view model =
+    let
+        heading =
+            h1 [] [ text "COLUMNS" ]
+
+        viewGame =
+            [ h3 [] [ text ("SCORE: " ++ String.fromInt model.gameData.score) ]
+            , GameGrid.view model.gameGrid DeadCellAnimationEnd
+            ]
+
+        ( classList, content ) =
+            case model.gamePhase of
+                TitleScreen ->
+                    ( [ class "TitleScreen" ]
+                    , [ button [ onClick StartGame ] [ text "START GAME" ] ]
+                    )
+
+                GameOver _ ->
+                    ( [ class "GameOverScreen" ]
+                    , viewGame
+                        ++ [ div
+                                [ class "GameOverPanel" ]
+                                [ div [] [ text "GAME OVER" ] ]
+                           ]
+                    )
+
+                Playing _ _ ->
+                    ( [], viewGame )
+    in
+    { title = "Columns"
+    , body =
+        [ div
+            (classList
+                ++ [ Touch.onStart <| Touch TouchStart --TODO: Only want touch events when game in progress
+                   , Touch.onMove <| Touch TouchMove -- otherwise they block they block the start button
+                   , Touch.onEnd <| Touch TouchEnd -- but for now this is useful while developing touch handler
+                   , id "main"
+                   ]
+            )
+            (heading :: content)
+        ]
+    }
+
+
+
+{-
+   @@  @@ @@@@@  @@@@@   @@@@  @@@@@@ @@@@@@
+   @@  @@ @@  @@ @@  @@ @@  @@   @@   @@
+   @@  @@ @@@@@  @@  @@ @@@@@@   @@   @@@@
+   @@  @@ @@     @@  @@ @@  @@   @@   @@
+    @@@@  @@     @@@@@  @@  @@   @@   @@@@@@
+-}
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -293,49 +368,14 @@ getDifficulty gameData =
     gameData.eliminationCount // 20
 
 
-view : Model -> Browser.Document Msg
-view model =
-    let
-        heading =
-            h1 [] [ text "COLUMNS" ]
 
-        viewGame =
-            [ h3 [] [ text ("SCORE: " ++ String.fromInt model.gameData.score) ]
-            , GameGrid.view model.gameGrid DeadCellAnimationEnd
-            ]
-
-        ( classList, content ) =
-            case model.gamePhase of
-                TitleScreen ->
-                    ( [ class "TitleScreen" ]
-                    , [ button [ onClick StartGame ] [ text "START GAME" ] ]
-                    )
-
-                GameOver _ ->
-                    ( [ class "GameOverScreen" ]
-                    , viewGame
-                        ++ [ div
-                                [ class "GameOverPanel" ]
-                                [ div [] [ text "GAME OVER" ] ]
-                           ]
-                    )
-
-                Playing _ _ ->
-                    ( [], viewGame )
-    in
-    { title = "Columns"
-    , body =
-        [ div
-            (classList
-                ++ [ Touch.onStart <| Touch TouchStart --TODO: Only want touch events when game in progress
-                   , Touch.onMove <| Touch TouchMove -- otherwise they block they block the start button
-                   , Touch.onEnd <| Touch TouchEnd -- but for now this is useful while developing touch handler
-                   , id "main"
-                   ]
-            )
-            (heading :: content)
-        ]
-    }
+{-
+   @@   @@   @@@@   @@@@@@  @@  @@
+   @@@ @@@  @@  @@    @@    @@@ @@
+   @@ @ @@  @@@@@@    @@    @@ @@@
+   @@   @@  @@  @@    @@    @@  @@
+   @@   @@  @@  @@  @@@@@@  @@  @@
+-}
 
 
 main : Program () Model Msg
