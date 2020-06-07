@@ -1,8 +1,6 @@
 {
   "name": "columns",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
   "scripts": {
     "start": "parcel index.html"
   },
@@ -12,6 +10,7 @@
     "elm-hot": "^1.1.4",
     "less": "^3.11.1",
     "node-elm-compiler": "^5.0.4",
-    "parcel": "^1.12.4"
+    "parcel": "^1.12.4",
+    "parcel-plugin-static-files-copy": "^2.3.1"
   }
 }
