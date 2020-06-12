@@ -1,5 +1,4 @@
-# Elm Columns [![Netlify Status](https://api.netlify.com/api/v1/badges/790abe46-307d-414a-a863-2c00991e960f/deploy-status)](https://app.netlify.com/sites/elm-columns/deploys)
-
+# Elm Columns [![Netlify Status](https://api.netlify.com/api/v1/badges/790abe46-307d-414a-a863-2c00991e960f/deploy-status)](https://app.netlify.com/sites/elm-columns/deploys) [![Run on Repl.it](https://repl.it/badge/github/TechnoTone/elm-columns)](https://repl.it/github/TechnoTone/elm-columns)
 
 A simple Columns game written in [Elm](https://elm-lang.org).
 
